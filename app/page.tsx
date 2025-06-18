@@ -106,9 +106,7 @@ export default function HomePage() {
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
               <span className="text-xl font-bold text-[#0F4C75]">LaundryBiner</span>
-            </Link>
-
-            {/* Desktop Navigation */}
+            </Link>            {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center gap-8">
               <Link href="#services" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
                 Layanan
@@ -121,6 +119,9 @@ export default function HomePage() {
               </Link>
               <Link href="/faq" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
                 FAQ
+              </Link>
+              <Link href="/order" className="text-white bg-[#0F4C75] hover:bg-[#0F4C75]/90 px-4 py-2 rounded-lg transition-colors">
+                Pesan Sekarang
               </Link>
             </nav>
 
@@ -200,10 +201,9 @@ export default function HomePage() {
             <p className="text-xl md:text-2xl mb-8 text-blue-100">
               Layanan laundry profesional dengan pickup & delivery gratis. Pakaian bersih, wangi, dan rapi dalam 2-3
               hari.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href={isLoggedIn ? "/order/create" : "/auth/signup"}>
-                <Button size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-8 py-3">
+            </p>            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link href="/order">
+                <Button size="lg" className="text-white bg-yellow-400 hover:bg-yellow-500 font-semibold px-8 py-3">
                   Mulai Order Sekarang
                 </Button>
               </Link>
@@ -211,7 +211,7 @@ export default function HomePage() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-white text-white hover:bg-white hover:text-[#0F4C75] px-8 py-3"
+                  className="border-white text-[#0F4C75] hover:bg-[#0F4C75] hover:text-white px-8 py-3"
                 >
                   Lihat Layanan
                 </Button>
@@ -312,7 +312,7 @@ export default function HomePage() {
             Daftar sekarang dan nikmati kemudahan laundry dengan pickup & delivery gratis
           </p>
           <Link href={isLoggedIn ? "/order/create" : "/auth/signup"}>
-            <Button size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-8 py-3">
+            <Button size="lg" className="text-white bg-yellow-400 hover:bg-yellow-500 font-semibold px-8 py-3">
               Mulai Order Sekarang
             </Button>
           </Link>
@@ -389,7 +389,7 @@ export default function HomePage() {
                   <Label htmlFor="message">Pesan</Label>
                   <Textarea id="message" placeholder="Tulis pesan Anda di sini..." rows={4} />
                 </div>
-                <Button className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90">Kirim Pesan</Button>
+                <Button className="text-white w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90">Kirim Pesan</Button>
               </form>
             </div>
           </div>

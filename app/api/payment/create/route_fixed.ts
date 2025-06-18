@@ -65,12 +65,12 @@ export async function POST(request: NextRequest) {
       enabled_payments: [
         "credit_card", "bca_va", "bni_va", "bri_va", "echannel", "permata_va",
         "other_va", "gopay", "shopeepay", "dana", "linkaja", "jenius", "qris"
-      ],
-      // QRIS specific configuration
+      ],      // QRIS specific configuration
       custom_expiry: {
         expiry_duration: 60,
         unit: "minute"
-      },      // Callbacks untuk redirect URLs
+      },
+      // Callbacks untuk redirect URLs
       callbacks: {
         finish: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/payment/finish`,
         unfinish: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/payment/unfinish`,

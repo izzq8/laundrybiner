@@ -7,8 +7,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Sparkles, Plus, Package, Clock, CheckCircle, Truck, History, User, Bell } from "lucide-react"
 
+interface Order {
+  id: string;
+  status_color: string;
+  status: string;
+  items: string;
+  pickup_date: string;
+  total: number;
+}
+
 export default function DashboardPage() {
-  const [orders] = useState([])
+  const [orders] = useState<Order[]>([])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -59,11 +68,9 @@ export default function DashboardPage() {
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Selamat Datang!</h2>
           <p className="text-gray-600">Kelola pesanan laundry Anda dengan mudah</p>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Link href="/order/create">
+        </div>        {/* Quick Actions */}
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
+          <Link href="/order">
             <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 border-dashed border-[#0F4C75]/20 hover:border-[#0F4C75]/40">
               <CardContent className="p-6 text-center">
                 <div className="w-12 h-12 bg-[#0F4C75] rounded-xl flex items-center justify-center mx-auto mb-4">
@@ -83,18 +90,6 @@ export default function DashboardPage() {
                 </div>
                 <h3 className="font-semibold text-gray-900 mb-2">Status Order</h3>
                 <p className="text-sm text-gray-600">Lacak pesanan aktif</p>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/orders">
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-              <CardContent className="p-6 text-center">
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <History className="w-6 h-6 text-green-600" />
-                </div>
-                <h3 className="font-semibold text-gray-900 mb-2">Riwayat</h3>
-                <p className="text-sm text-gray-600">Lihat pesanan sebelumnya</p>
               </CardContent>
             </Card>
           </Link>
@@ -161,21 +156,19 @@ export default function DashboardPage() {
                 <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Belum ada pesanan</h3>
                 <p className="text-gray-600 mb-6">Mulai pesanan laundry pertama Anda sekarang</p>
-                <Link href="/order/create">
-                  <Button className="bg-[#0F4C75] hover:bg-[#0F4C75]/90">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Buat Order Baru
+                <Link href="/order">
+                  <Button className="bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white">
+                    <Plus className="w-4 h-4 mr-2 text-white" />
+                    <span className="text-white">Buat Order Baru</span>
                   </Button>
                 </Link>
               </div>
             )}
           </CardContent>
         </Card>
-      </div>
-
-      {/* Bottom Navigation */}
+      </div>      {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg md:hidden">
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-3 gap-1">
           <Link href="/dashboard" className="flex flex-col items-center py-3 text-[#0F4C75]">
             <Package className="w-5 h-5 mb-1" />
             <span className="text-xs">Home</span>
@@ -183,10 +176,6 @@ export default function DashboardPage() {
           <Link href="/orders" className="flex flex-col items-center py-3 text-gray-600">
             <Clock className="w-5 h-5 mb-1" />
             <span className="text-xs">Status</span>
-          </Link>
-          <Link href="/orders" className="flex flex-col items-center py-3 text-gray-600">
-            <History className="w-5 h-5 mb-1" />
-            <span className="text-xs">Riwayat</span>
           </Link>
           <Link href="/profile" className="flex flex-col items-center py-3 text-gray-600">
             <User className="w-5 h-5 mb-1" />
