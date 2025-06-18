@@ -3,11 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase"
 
 export async function GET(request: NextRequest) {
   try {
-    // For demo purposes, we'll get all orders for demo user
-    // In production, you should filter by user_id based on authentication
-    const demoUserId = '550e8400-e29b-41d4-a716-446655440000'
-
-    // Get orders from database
+    // Get all orders - in production you would filter by authenticated user
     const { data: orders, error } = await supabaseAdmin
       .from("orders")
       .select(`
@@ -19,7 +15,6 @@ export async function GET(request: NextRequest) {
           description
         )
       `)
-      .eq("user_id", demoUserId)
       .order("created_at", { ascending: false })
 
     if (error) {
