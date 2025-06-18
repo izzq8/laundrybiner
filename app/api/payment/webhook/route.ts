@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
-import { createClient } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase"
 
 // Midtrans configuration - Using your sandbox credentials
 const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || "SB-Mid-server-bS9phW7kMqLO0jGb3Q9n7INz"
@@ -31,10 +31,8 @@ export async function POST(request: NextRequest) {
     // Extract transaction details
     const { transaction_status, order_id, payment_type, fraud_status, transaction_time, gross_amount: amount } = body
 
-    console.log(`SANDBOX Webhook - Order ${order_id}: ${transaction_status} (${payment_type})`)
-
-    // Initialize Supabase client
-    const supabase = createClient()
+    console.log(`SANDBOX Webhook - Order ${order_id}: ${transaction_status} (${payment_type})`)    // Initialize Supabase client
+    const supabase = supabaseAdmin
 
     // Determine order status based on transaction status
     let orderStatus = "pending"
@@ -51,18 +49,17 @@ export async function POST(request: NextRequest) {
     } else if (transaction_status === "pending") {
       orderStatus = "pending"
       paymentStatus = "pending"
-    }
-
-    // Update order in database
+    }    // Update order in database
     const { error: orderError } = await supabase
       .from("orders")
       .update({
         status: orderStatus,
         payment_status: paymentStatus,
         payment_method: payment_type,
+        transaction_time: transaction_time ? new Date(transaction_time).toISOString() : null,
         updated_at: new Date().toISOString(),
       })
-      .eq("order_id", order_id)
+      .eq("transaction_id", order_id) // Use transaction_id instead of order_id
 
     if (orderError) {
       console.error("Error updating order status:", orderError)
@@ -92,11 +89,10 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Webhook processing error:", error)
-    return NextResponse.json(
-      {
+    return NextResponse.json(      {
         success: false,
         message: "Internal server error",
-        error: error.message,
+        error: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )

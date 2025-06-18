@@ -9,7 +9,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, User, Mail, Phone, MapPin, Lock, LogOut, Trash2, Info } from "lucide-react"
-import { signOut } from "@/lib/supabase"
+import { signOut, supabase } from "@/lib/supabase"
+
+interface Address {
+  id: string;
+  label: string;
+  is_default: boolean;
+  address: string;
+}
 
 export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
@@ -20,7 +27,7 @@ export default function ProfilePage() {
     phone: typeof window !== "undefined" ? localStorage.getItem("userPhone") || "" : "",
   })
 
-  const [addresses] = useState([])
+  const [addresses] = useState<Address[]>([])
 
   useEffect(() => {
     // Load user data from localStorage (in real app, this would come from Supabase)
@@ -46,12 +53,40 @@ export default function ProfilePage() {
     }
   }, [])
 
-  const handleSave = () => {
-    // Save profile changes
-    localStorage.setItem("userName", profile.name)
-    localStorage.setItem("userEmail", profile.email)
-    localStorage.setItem("userPhone", profile.phone)
-    setIsEditing(false)
+  const handleSave = async () => {
+    try {
+      // Ambil user id dari session Supabase
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const userId = session?.user?.id
+      if (!userId) {
+        alert("User tidak ditemukan. Silakan login ulang.")
+        return
+      }
+      // Update ke database Supabase
+      const { error } = await supabase
+        .from("users")
+        .update({
+          name: profile.name,
+          email: profile.email,
+          phone: profile.phone,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", userId)
+      if (error) {
+        throw error
+      }
+      // Simpan ke localStorage
+      localStorage.setItem("userName", profile.name)
+      localStorage.setItem("userEmail", profile.email)
+      localStorage.setItem("userPhone", profile.phone)
+      setIsEditing(false)
+      alert("Profil berhasil diperbarui.")
+    } catch (err) {
+      console.error("Gagal update profil:", err)
+      alert("Gagal menyimpan perubahan profil.")
+    }
   }
 
   const handleLogout = async () => {

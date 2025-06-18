@@ -7,8 +7,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Sparkles, Plus, Package, Clock, CheckCircle, Truck, History, User, Bell } from "lucide-react"
 
+interface Order {
+  id: string;
+  status_color: string;
+  status: string;
+  items: string;
+  pickup_date: string;
+  total: number;
+}
+
 export default function DashboardPage() {
-  const [orders] = useState([])
+  const [orders] = useState<Order[]>([])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -162,9 +171,9 @@ export default function DashboardPage() {
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Belum ada pesanan</h3>
                 <p className="text-gray-600 mb-6">Mulai pesanan laundry pertama Anda sekarang</p>
                 <Link href="/order/create">
-                  <Button className="bg-[#0F4C75] hover:bg-[#0F4C75]/90">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Buat Order Baru
+                  <Button className="bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white">
+                    <Plus className="w-4 h-4 mr-2 text-white" />
+                    <span className="text-white">Buat Order Baru</span>
                   </Button>
                 </Link>
               </div>
