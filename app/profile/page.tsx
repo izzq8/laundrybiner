@@ -348,33 +348,30 @@ export default function ProfilePage() {
               )}
             </div>
           </CardContent>
-        </Card>
-
-        {/* Security Settings */}
+        </Card>        {/* Security Settings */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Keamanan</CardTitle>
             <CardDescription>Kelola password dan keamanan akun</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {loginMethod === "google" && (
+            {loginMethod === "google" ? (
               <Alert>
                 <Info className="h-4 w-4" />
                 <AlertDescription>
                   Anda masuk menggunakan Google. Password dikelola melalui akun Google Anda.
                 </AlertDescription>
               </Alert>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={handleChangePassword}
+              >
+                <Lock className="w-4 h-4 mr-2" />
+                Ganti Password
+              </Button>
             )}
-
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              onClick={handleChangePassword}
-              disabled={loginMethod === "google"}
-            >
-              <Lock className="w-4 h-4 mr-2" />
-              {loginMethod === "google" ? "Password Dikelola Google" : "Ganti Password"}
-            </Button>
           </CardContent>
         </Card>
 
