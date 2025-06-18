@@ -219,21 +219,24 @@ export default function OrderPage() {
     if (validationError) {
       alert(validationError)
       return
-    }
+    }    setLoading(true)
 
-    setLoading(true)
+    try {
+      // Generate Midtrans order ID first
+      const midtransOrderId = `LAUNDRY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
-    try {      // Create order
+      // Create order
       const orderPayload = {
         serviceType: orderData.serviceType,
         serviceTypeId: orderData.serviceTypeId,
         weight: orderData.serviceType === 'kiloan' ? orderData.weight : null,
         items: orderData.serviceType === 'satuan' ? orderData.items : [],
-        pickupAddress: orderData.pickupAddress,
-        pickupDate: orderData.pickupDate,
-        pickupTime: orderData.pickupTime,        contactName: orderData.contactName,
+        pickupAddress: orderData.pickupAddress,        pickupDate: orderData.pickupDate,
+        pickupTime: orderData.pickupTime,
+        contactName: orderData.contactName,
         contactPhone: orderData.contactPhone,
-        notes: orderData.notes
+        notes: orderData.notes,
+        transactionId: midtransOrderId
       }
 
       const createResponse = await fetch('/api/orders/new', {
@@ -249,9 +252,6 @@ export default function OrderPage() {
       if (!createResult.success) {
         throw new Error(createResult.message || 'Gagal membuat pesanan')
       }
-
-      // Generate Midtrans order ID
-      const midtransOrderId = `LAUNDRY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
       // Create payment
       const paymentPayload = {
@@ -309,13 +309,13 @@ export default function OrderPage() {
         window.snap.pay(paymentResult.token, {
           onSuccess: function(result: any) {
             console.log('Payment success:', result)
-            // Let Midtrans handle the redirect via callbacks in payment API
-            // The redirect will go to /payment/finish automatically
+            // Redirect to finish page with order details
+            router.push(`/payment/finish?order_id=${midtransOrderId}&transaction_status=settlement&status_code=200`)
           },
           onPending: function(result: any) {
             console.log('Payment pending:', result)
-            // Let Midtrans handle the redirect via callbacks in payment API
-            // The redirect will go to /payment/finish automatically
+            // Redirect to finish page with pending status
+            router.push(`/payment/finish?order_id=${midtransOrderId}&transaction_status=pending&status_code=201`)
           },
           onError: function(result: any) {
             console.error('Payment error:', result)

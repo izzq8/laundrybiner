@@ -55,11 +55,9 @@ export async function POST(request: NextRequest) {
       .update({
         status: orderStatus,
         payment_status: paymentStatus,
-        payment_method: payment_type,
-        transaction_time: transaction_time ? new Date(transaction_time).toISOString() : null,
         updated_at: new Date().toISOString(),
       })
-      .eq("transaction_id", order_id) // Use transaction_id instead of order_id
+      .eq("midtrans_transaction_id", order_id) // Use midtrans_transaction_id instead of transaction_id
 
     if (orderError) {
       console.error("Error updating order status:", orderError)

@@ -19,7 +19,25 @@ interface Order {
   customer_phone: string
   pickup_address: string
   notes?: string
+  weight?: number
   created_at: string
+  service_types?: {
+    name: string
+    type: string
+    price: number
+    description: string
+  }
+  order_items?: Array<{
+    id: string
+    quantity: number
+    total_price: number
+    item_name: string
+    item_types?: {
+      name: string
+      price: number
+      category: string
+    }
+  }>
 }
 
 export default function OrderStatusPage() {
@@ -33,13 +51,16 @@ export default function OrderStatusPage() {
       fetchOrderStatus(params.orderId as string)
     }
   }, [params.orderId])
-
   const fetchOrderStatus = async (orderId: string) => {
     try {
-      const response = await fetch(`/api/payment/status/${orderId}`)
+      const response = await fetch(`/api/orders/${orderId}`)
       if (response.ok) {
         const data = await response.json()
-        setOrder(data.order)
+        if (data.success) {
+          setOrder(data.data)
+        } else {
+          setError('Pesanan tidak ditemukan')
+        }
       } else {
         setError('Pesanan tidak ditemukan')
       }
@@ -226,9 +247,7 @@ export default function OrderStatusPage() {
                         <p className="text-sm text-gray-600">Waktu Penjemputan</p>
                         <p className="font-medium">{order.pickup_time}</p>
                       </div>
-                    </div>
-
-                    <div className="flex items-center space-x-3">
+                    </div>                    <div className="flex items-center space-x-3">
                       <User className="h-5 w-5 text-gray-400" />
                       <div>
                         <p className="text-sm text-gray-600">Nama Kontak</p>

@@ -106,8 +106,7 @@ export default function HomePage() {
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
               <span className="text-xl font-bold text-[#0F4C75]">LaundryBiner</span>
-            </Link>            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center gap-8">
+            </Link>            {/* Desktop Navigation */}            <nav className="hidden md:flex items-center gap-8">
               <Link href="#services" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
                 Layanan
               </Link>
@@ -120,6 +119,11 @@ export default function HomePage() {
               <Link href="/faq" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
                 FAQ
               </Link>
+              {isLoggedIn && (
+                <Link href="/orders" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
+                  Pesanan Saya
+                </Link>
+              )}
               <Link href="/order" className="text-white bg-[#0F4C75] hover:bg-[#0F4C75]/90 px-4 py-2 rounded-lg transition-colors">
                 Pesan Sekarang
               </Link>
