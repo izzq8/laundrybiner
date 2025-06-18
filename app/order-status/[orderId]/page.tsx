@@ -33,13 +33,17 @@ export default function OrderStatusPage() {
       fetchOrderStatus(params.orderId as string)
     }
   }, [params.orderId])
-
   const fetchOrderStatus = async (orderId: string) => {
     try {
-      const response = await fetch(`/api/payment/status/${orderId}`)
+      // Use our new endpoint that combines order and tracking data
+      const response = await fetch(`/api/orders/status/${orderId}`)
       if (response.ok) {
         const data = await response.json()
-        setOrder(data.order)
+        if (data.success && data.order) {
+          setOrder(data.order)
+        } else {
+          setError('Pesanan tidak ditemukan')
+        }
       } else {
         setError('Pesanan tidak ditemukan')
       }

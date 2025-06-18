@@ -53,61 +53,109 @@ export default function OrdersPage() {
     checkUser();
   }, [router]);
 
+  // Debug orders state
+  useEffect(() => {
+    if (orders.length > 0) {
+      console.log("Orders loaded:", orders.length);
+      console.log("Sample order status:", orders[0].status);
+    }
+  }, [orders]);
+
   const fetchOrders = async (userId: string) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Get all orders for the user
+      const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
-      setOrders(data || []);
+      if (ordersError) throw ordersError;
+      
+      if (ordersData && ordersData.length > 0) {
+        // Fetch the latest tracking status for each order
+        const ordersWithStatus = await Promise.all(
+          ordersData.map(async (order) => {
+            // Get the latest status from order_tracking
+            const { data: trackingData, error: trackingError } = await supabase
+              .from('order_tracking')
+              .select('*')
+              .eq('order_id', order.id)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            if (!trackingError && trackingData && trackingData.length > 0) {
+              // Update the order status with the latest tracking status
+              return {
+                ...order,
+                status: trackingData[0].status
+              };
+            }
+            
+            return order;
+          })
+        );
+        
+        setOrders(ordersWithStatus || []);
+      } else {
+        setOrders([]);
+      }
     } catch (error) {
       console.error('Error fetching orders:', error);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
   };
-
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+    switch (status?.toLowerCase() || '') {
       case 'pending':
       case 'menunggu pembayaran':
         return 'bg-yellow-500';
       case 'processing':
+      case 'confirmed':
+      case 'in_progress':
       case 'sedang diproses':
         return 'bg-blue-500';
       case 'pickup':
+      case 'picked_up':
       case 'menunggu pickup':
         return 'bg-purple-500';
+      case 'ready':
       case 'delivery':
       case 'dalam pengiriman':
         return 'bg-indigo-500';
       case 'completed':
+      case 'delivered':
       case 'selesai':
         return 'bg-green-500';
+      case 'cancelled':
+        return 'bg-red-500';
       default:
         return 'bg-gray-500';
     }
   };
-
   const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
+    switch (status?.toLowerCase() || '') {
       case 'pending':
       case 'menunggu pembayaran':
         return <Clock className="w-4 h-4" />;
       case 'processing':
+      case 'confirmed':
+      case 'in_progress':
       case 'sedang diproses':
         return <Package className="w-4 h-4" />;
       case 'pickup':
+      case 'picked_up':
       case 'menunggu pickup':
         return <Clock className="w-4 h-4" />;
+      case 'ready':
       case 'delivery':
       case 'dalam pengiriman':
         return <Truck className="w-4 h-4" />;
       case 'completed':
+      case 'delivered':
       case 'selesai':
         return <CheckCircle className="w-4 h-4" />;
       default:
@@ -123,13 +171,21 @@ export default function OrdersPage() {
       year: 'numeric',
     }).format(date);
   };
-
+  const activeStatuses = [
+    'pending', 'menunggu pembayaran', 
+    'processing', 'confirmed', 'in_progress', 'sedang diproses',
+    'pickup', 'picked_up', 'menunggu pickup',
+    'ready', 'delivery', 'dalam pengiriman'
+  ];
+  
+  const completedStatuses = ['completed', 'delivered', 'selesai'];
+  
   const activeOrders = orders.filter(order => 
-    ['pending', 'menunggu pembayaran', 'processing', 'sedang diproses', 'pickup', 'menunggu pickup', 'delivery', 'dalam pengiriman'].includes(order.status.toLowerCase())
+    order.status && activeStatuses.includes(order.status.toLowerCase())
   );
   
   const completedOrders = orders.filter(order => 
-    ['completed', 'selesai'].includes(order.status.toLowerCase())
+    order.status && completedStatuses.includes(order.status.toLowerCase())
   );
 
   return (
