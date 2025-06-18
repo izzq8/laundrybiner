@@ -9,51 +9,140 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, User, Mail, Phone, MapPin, Lock, LogOut, Trash2, Info } from "lucide-react"
-import { signOut } from "@/lib/supabase"
+import { signOut, getCurrentUser, getUserProfile, updateUserProfile, supabase } from "@/lib/supabase"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function ProfilePage() {
+  const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [loginMethod, setLoginMethod] = useState<"email" | "google" | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const [profile, setProfile] = useState({
-    name: typeof window !== "undefined" ? localStorage.getItem("userName") || "" : "",
-    email: typeof window !== "undefined" ? localStorage.getItem("userEmail") || "" : "",
-    phone: typeof window !== "undefined" ? localStorage.getItem("userPhone") || "" : "",
+    name: "",
+    email: "",
+    phone: "",
   })
 
-  const [addresses] = useState([])
-
+  const [addresses, setAddresses] = useState<Array<{
+    id: string;
+    address: string;
+    label?: string;
+    is_default: boolean;
+  }>>([]);
+  // Fetch user data from Supabase
   useEffect(() => {
-    // Load user data from localStorage (in real app, this would come from Supabase)
-    const userName = localStorage.getItem("userName")
-    const userEmail = localStorage.getItem("userEmail")
-    const userPhone = localStorage.getItem("userPhone")
-    const authMethod = localStorage.getItem("authMethod") // 'email' or 'google'
-
-    if (userName || userEmail || userPhone) {
-      setProfile({
-        name: userName || "",
-        email: userEmail || "",
-        phone: userPhone || "",
-      })
+    const fetchUserData = async () => {
+      try {
+        setIsLoading(true)
+        // Get current authenticated user
+        const user = await getCurrentUser()
+        
+        if (!user) {
+          console.error("No authenticated user found")
+          window.location.href = "/auth/signin"
+          return
+        }
+        
+        setUserId(user.id)
+        
+        // Determine login method from user metadata
+        setLoginMethod(
+          user.app_metadata?.provider === "google" ? "google" : "email"
+        )
+        
+        // Get user profile from database
+        try {
+          const userProfile = await getUserProfile(user.id)
+          
+          if (userProfile) {
+            setProfile({
+              name: userProfile.name || user.user_metadata?.full_name || "",
+              email: userProfile.email || user.email || "",
+              phone: userProfile.phone || "",
+            })
+            
+            // Also store in localStorage as fallback
+            localStorage.setItem("userName", userProfile.name || user.user_metadata?.full_name || "")
+            localStorage.setItem("userEmail", userProfile.email || user.email || "")
+            localStorage.setItem("userPhone", userProfile.phone || "")
+          } else {
+            // Fallback to user auth data
+            setProfile({
+              name: user.user_metadata?.full_name || "",
+              email: user.email || "",
+              phone: "",
+            })
+          }
+          
+          // Get user addresses
+          try {
+            const { data: userAddresses } = await supabase
+              .from("addresses")
+              .select("*")
+              .eq("user_id", user.id)
+              .order("is_default", { ascending: false })
+            
+            if (userAddresses) {
+              setAddresses(userAddresses)
+            }
+          } catch (addressError) {
+            console.error("Error fetching addresses:", addressError)
+          }
+          
+        } catch (error) {
+          console.error("Error fetching user profile:", error)
+          // Fallback to localStorage
+          const userName = localStorage.getItem("userName")
+          const userEmail = localStorage.getItem("userEmail")
+          const userPhone = localStorage.getItem("userPhone")
+          
+          setProfile({
+            name: userName || user.user_metadata?.full_name || "",
+            email: userEmail || user.email || "",
+            phone: userPhone || "",
+          })
+        }
+      } catch (error) {
+        console.error("Error loading user data:", error)
+      } finally {
+        setIsLoading(false)
+      }
     }
 
-    // Determine login method (in real app, this would come from Supabase user metadata)
-    if (authMethod) {
-      setLoginMethod(authMethod as "email" | "google")
-    } else {
-      // Default assumption based on email domain or other logic
-      setLoginMethod("email")
-    }
+    fetchUserData()
   }, [])
 
-  const handleSave = () => {
-    // Save profile changes
-    localStorage.setItem("userName", profile.name)
-    localStorage.setItem("userEmail", profile.email)
-    localStorage.setItem("userPhone", profile.phone)
-    setIsEditing(false)
+  const handleSave = async () => {
+    if (!userId) {      toast.error("User ID tidak ditemukan. Silakan login ulang.")
+      return
+    }
+    
+    setIsSaving(true)
+    
+    try {
+      // Save to local storage as backup
+      localStorage.setItem("userName", profile.name)
+      localStorage.setItem("userEmail", profile.email)
+      localStorage.setItem("userPhone", profile.phone)
+      
+      // Save to Supabase database
+      await updateUserProfile(userId, {
+        name: profile.name,
+        phone: profile.phone,
+        // Don't update email here as it requires email verification
+      })
+        toast.success("Informasi profil Anda telah diperbarui.")
+      
+      setIsEditing(false)
+    } catch (error) {
+      console.error("Error saving profile:", error)
+      toast.error("Terjadi kesalahan saat menyimpan profil. Silakan coba lagi.")
+    } finally {
+      setIsSaving(false)
+    }
   }
-
   const handleLogout = async () => {
     try {
       await signOut()
@@ -68,7 +157,7 @@ export default function ProfilePage() {
       window.location.href = "/"
     } catch (error) {
       console.error("Logout error:", error)
-      alert("Gagal keluar dari akun. Silakan coba lagi.")
+      toast.error("Gagal keluar dari akun. Silakan coba lagi.")
     }
   }
 
