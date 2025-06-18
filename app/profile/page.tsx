@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, User, Mail, Phone, MapPin, Lock, LogOut, Trash2, Info } from "lucide-react"
 import { signOut, getCurrentUser, getUserProfile, updateUserProfile, supabase } from "@/lib/supabase"
 import { useToast } from "@/components/ui/use-toast"
+import { AddressDialog } from "@/components/address-dialog"
 
 export default function ProfilePage() {
   const { toast } = useToast()
@@ -24,14 +25,18 @@ export default function ProfilePage() {
     email: "",
     phone: "",
   })
-
-  const [addresses, setAddresses] = useState<Array<{
+  // Add state for address dialog
+  const [isAddressDialogOpen, setIsAddressDialogOpen] = useState(false)
+    const [addresses, setAddresses] = useState<Array<{
     id: string;
-    address: string;
+    address?: string;
+    address_line?: string;
+    city?: string;
+    postal_code?: string;
+    notes?: string;
     label?: string;
     is_default: boolean;
-  }>>([]);
-  // Fetch user data from Supabase
+  }>>([]);// Fetch user data from Supabase
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -77,19 +82,7 @@ export default function ProfilePage() {
           }
           
           // Get user addresses
-          try {
-            const { data: userAddresses } = await supabase
-              .from("addresses")
-              .select("*")
-              .eq("user_id", user.id)
-              .order("is_default", { ascending: false })
-            
-            if (userAddresses) {
-              setAddresses(userAddresses)
-            }
-          } catch (addressError) {
-            console.error("Error fetching addresses:", addressError)
-          }
+          await fetchUserAddresses(user.id)
           
         } catch (error) {
           console.error("Error fetching user profile:", error)
@@ -113,6 +106,33 @@ export default function ProfilePage() {
 
     fetchUserData()
   }, [])
+  // Fetch user addresses from Supabase
+  const fetchUserAddresses = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("addresses")
+        .select("*")
+        .eq("user_id", userId)
+        .order("is_default", { ascending: false })
+      
+      if (error) throw error
+      
+      if (data) {
+        setAddresses(data)
+      }
+    } catch (error) {
+      console.error("Error fetching addresses:", error)
+      toast.error("Gagal memuat alamat Anda. Silakan coba lagi.")
+    }
+  }
+  
+  // Handle address added/updated
+  const handleAddressAdded = async () => {
+    if (userId) {
+      await fetchUserAddresses(userId)
+      toast.success("Alamat berhasil ditambahkan.")
+    }
+  }
 
   const handleSave = async () => {
     if (!userId) {      toast.error("User ID tidak ditemukan. Silakan login ulang.")
@@ -259,7 +279,7 @@ export default function ProfilePage() {
                 <CardTitle>Alamat Tersimpan</CardTitle>
                 <CardDescription>Kelola alamat pickup dan delivery</CardDescription>
               </div>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={() => setIsAddressDialogOpen(true)}>
                 Tambah Alamat
               </Button>
             </div>
@@ -278,14 +298,36 @@ export default function ProfilePage() {
                             <span className="text-xs bg-[#0F4C75] text-white px-2 py-1 rounded">Default</span>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600">{address.address}</p>
+                        <p className="text-sm text-gray-600">{address.address_line || address.address}</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
                       <Button variant="ghost" size="sm">
                         Edit
-                      </Button>
-                      <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
+                      </Button>                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-red-600 hover:text-red-700"
+                        onClick={async () => {
+                          try {
+                            if (!window.confirm('Yakin ingin menghapus alamat ini?')) return;
+                            
+                            const { error } = await supabase
+                              .from('addresses')
+                              .delete()
+                              .eq('id', address.id);
+                              
+                            if (error) throw error;
+                            
+                            toast.success('Alamat berhasil dihapus');
+                            // Refresh addresses
+                            if (userId) fetchUserAddresses(userId);
+                          } catch (error) {
+                            console.error('Error deleting address:', error);
+                            toast.error('Gagal menghapus alamat');
+                          }
+                        }}
+                      >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -295,8 +337,11 @@ export default function ProfilePage() {
                 <div className="text-center py-8">
                   <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                   <h4 className="font-medium text-gray-900 mb-2">Belum ada alamat tersimpan</h4>
-                  <p className="text-sm text-gray-600 mb-4">Tambahkan alamat untuk mempercepat proses pemesanan</p>
-                  <Button size="sm" className="bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white">
+                  <p className="text-sm text-gray-600 mb-4">Tambahkan alamat untuk mempercepat proses pemesanan</p>                  <Button 
+                    size="sm" 
+                    className="bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white"
+                    onClick={() => setIsAddressDialogOpen(true)}
+                  >
                     Tambah Alamat Pertama
                   </Button>
                 </div>
@@ -368,7 +413,15 @@ export default function ProfilePage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </div>      {/* Address Dialog - Separate from the main return to avoid hydration issues */}
+      {userId && (
+        <AddressDialog
+          isOpen={isAddressDialogOpen}
+          onOpenChange={setIsAddressDialogOpen}
+          userId={userId}
+          onAddressAdded={handleAddressAdded}
+        />
+      )}
     </div>
   )
 }
