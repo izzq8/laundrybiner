@@ -13,22 +13,27 @@ export async function GET(
         success: false,
         message: "Order ID is required"
       }, { status: 400 })
-    }
-
-    // Fetch order with items
+    }    // Fetch order with items using midtrans_transaction_id
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
       .select(`
         *,
+        service_types (
+          name,
+          type,
+          price,
+          description
+        ),
         order_items (
-          id,
-          item_name,
-          quantity,
-          price_per_item,
-          total_price
+          *,
+          item_types (
+            name,
+            price,
+            category
+          )
         )
       `)
-      .eq("id", orderId)
+      .eq("midtrans_transaction_id", orderId)
       .single()
 
     if (orderError || !order) {
