@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: orders || []
     })
+
   } catch (error) {
     console.error("Error in orders API:", error)
     return NextResponse.json({

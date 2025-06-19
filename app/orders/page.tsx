@@ -20,6 +20,13 @@ interface Order {
   customer_phone: string
   pickup_address: string
   created_at: string
+  service_type?: string
+  weight?: number
+  pickup_option?: string
+  delivery_option?: string
+  delivery_address?: string
+  delivery_date?: string
+  delivery_time?: string
   service_types?: {
     name: string
     type: string
@@ -132,6 +139,41 @@ export default function OrdersPage() {
       if (!order) return      // Generate unique order_id by appending timestamp to avoid "order_id already taken" error
       const uniqueOrderId = `${order.order_number}-${Date.now()}`
 
+      // Prepare detailed item details for better QRIS support
+      const itemDetails = []
+      
+      // Base service cost
+      const baseAmount = order.service_type === 'kiloan' 
+        ? (order.weight || 1) * 8000 
+        : order.total_amount - (order.pickup_option === 'pickup' ? 5000 : 0) - (order.delivery_option === 'delivery' ? 5000 : 0)
+      
+      itemDetails.push({
+        id: `service-${order.service_types?.type || 'laundry'}`,
+        name: `${order.service_types?.name || 'Layanan Laundry'}${order.service_type === 'kiloan' ? ` (${order.weight || 1} kg)` : ''}`,
+        price: baseAmount,
+        quantity: 1,
+      })
+
+      // Add pickup fee if applicable
+      if (order.pickup_option === 'pickup') {
+        itemDetails.push({
+          id: 'pickup-fee',
+          name: 'Biaya Pickup',
+          price: 5000,
+          quantity: 1,
+        })
+      }
+
+      // Add delivery fee if applicable  
+      if (order.delivery_option === 'delivery') {
+        itemDetails.push({
+          id: 'delivery-fee',
+          name: 'Biaya Delivery',
+          price: 5000,
+          quantity: 1,
+        })
+      }
+
       const response = await fetch('/api/payment/create', {
         method: 'POST',
         headers: {
@@ -143,15 +185,9 @@ export default function OrdersPage() {
           customer_details: {
             first_name: order.customer_name,
             phone: order.customer_phone,
+            email: `${order.customer_name.toLowerCase().replace(/\s+/g, '')}@laundrybiner.com`,
           },
-          item_details: [
-            {
-              id: order.service_types?.type || 'laundry-service',
-              name: order.service_types?.name || 'Layanan Laundry',
-              price: order.total_amount,
-              quantity: 1,
-            }
-          ],
+          item_details: itemDetails,
         }),
       })
 

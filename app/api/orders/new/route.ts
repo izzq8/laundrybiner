@@ -1,153 +1,147 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    console.log('Order creation request body:', JSON.stringify(body, null, 2))
+    const body = await request.json();
+    console.log('Order creation request body:', body);
 
     const {
       serviceType,
       serviceTypeId,
       weight,
       items,
+      pickupOption,
       pickupAddress,
       pickupDate,
       pickupTime,
+      deliveryOption,
+      deliveryAddress,
+      deliveryDate,
+      deliveryTime,
       contactName,
       contactPhone,
       notes,
       transactionId
-    } = body
+    } = body;
 
-    // Validate required fields
-    if (!serviceTypeId) {
-      console.error('Missing serviceTypeId')
+    // Validation
+    if (!serviceType || !serviceTypeId || !contactName || !contactPhone || !transactionId) {
       return NextResponse.json(
-        { success: false, message: 'Service type is required' },
+        { error: 'Missing required fields' },
         { status: 400 }
-      )
+      );
     }
 
-    if (!contactName || !contactPhone || !pickupAddress) {
-      console.error('Missing required contact fields')
+    if (serviceType === 'kiloan' && (!weight || weight <= 0)) {
       return NextResponse.json(
-        { success: false, message: 'Contact information is required' },
+        { error: 'Weight is required for kiloan service' },
         { status: 400 }
-      )
+      );
+    }
+
+    if (serviceType === 'satuan' && (!items || items.length === 0)) {
+      return NextResponse.json(
+        { error: 'Items are required for satuan service' },
+        { status: 400 }
+      );
+    }
+
+    if (pickupOption === 'pickup' && (!pickupAddress || !pickupDate || !pickupTime)) {
+      return NextResponse.json(
+        { error: 'Pickup address, date, and time are required when pickup is selected' },
+        { status: 400 }
+      );
+    }
+
+    if (deliveryOption === 'delivery' && (!deliveryAddress || !deliveryDate || !deliveryTime)) {
+      return NextResponse.json(
+        { error: 'Delivery address, date, and time are required when delivery is selected' },
+        { status: 400 }
+      );
     }
 
     // Calculate total amount
-    let totalAmount = 0
-    if (serviceType === 'kiloan' && weight) {
-      // Get service type price
-      const { data: serviceData, error: serviceError } = await supabaseAdmin
-        .from('service_types')
-        .select('price')
-        .eq('id', serviceTypeId)
-        .single()
+    const baseAmount = serviceType === 'kiloan' 
+      ? weight * 8000  // 8000 per kg
+      : items.reduce((total: number, item: any) => total + item.totalPrice, 0);
+    
+    const pickupFee = pickupOption === 'pickup' ? 5000 : 0;
+    const deliveryFee = deliveryOption === 'delivery' ? 5000 : 0;
+    const totalAmount = baseAmount + pickupFee + deliveryFee;
 
-      if (serviceError) {
-        console.error('Error fetching service type:', serviceError)
-        return NextResponse.json(
-          { success: false, message: 'Invalid service type' },
-          { status: 400 }
-        )
-      }
+    console.log(`Calculated total amount: ${totalAmount} with pickup fee: ${pickupFee} and delivery fee: ${deliveryFee}`);
 
-      totalAmount = serviceData.price * weight
-    } else if (serviceType === 'satuan' && items?.length > 0) {
-      totalAmount = items.reduce((sum: number, item: any) => sum + item.totalPrice, 0)
-    }
-
-    // Add pickup and delivery fees
-    totalAmount += 10000 // 5000 pickup + 5000 delivery
-
-    console.log('Calculated total amount:', totalAmount)
-
-    // Use demo user ID
-    const demoUserId = '550e8400-e29b-41d4-a716-446655440000'    // Prepare order data
+    // Prepare order data - ONLY fields that exist in the database schema
     const orderData = {
-      user_id: demoUserId,
+      // Required fields from database schema
       service_type_id: serviceTypeId,
-      weight: serviceType === 'kiloan' ? weight : null,
       total_amount: totalAmount,
-      pickup_date: pickupDate || null,
-      pickup_time: pickupTime || null,
       customer_name: contactName,
       customer_phone: contactPhone,
-      customer_email: null,
-      pickup_address: pickupAddress,
-      notes: notes || null,
+      pickup_address: pickupOption === 'pickup' ? pickupAddress : null,
       status: 'pending',
       payment_status: 'pending',
-      midtrans_transaction_id: transactionId || null
-    }
+      
+      // Optional fields that exist in database
+      weight: serviceType === 'kiloan' ? weight : null,
+      pickup_date: pickupOption === 'pickup' ? pickupDate : null,
+      pickup_time: pickupOption === 'pickup' ? pickupTime : null,
+      delivery_date: deliveryOption === 'delivery' ? deliveryDate : null,
+      delivery_time: deliveryOption === 'delivery' ? deliveryTime : null,
+      delivery_address: deliveryOption === 'delivery' ? deliveryAddress : null,
+      pickup_option: pickupOption,
+      delivery_option: deliveryOption,
+      service_type: serviceType,
+      items: serviceType === 'satuan' ? JSON.stringify(items) : null,
+      customer_email: null,
+      notes: notes || null,
+      midtrans_transaction_id: transactionId,
+      midtrans_order_id: transactionId
+    };
 
-    console.log('Order data to insert:', JSON.stringify(orderData, null, 2))
+    console.log('Order data to insert:', JSON.stringify(orderData, null, 2));
 
     // Insert order
-    const { data: order, error: orderError } = await supabaseAdmin
+    const { data: order, error: insertError } = await supabase
       .from('orders')
-      .insert(orderData)
+      .insert([orderData])
       .select()
-      .single()
+      .single();
 
-    if (orderError) {
-      console.error('Error creating order:', orderError)
+    if (insertError) {
+      console.error('Database insert error:', insertError);
       return NextResponse.json(
         { 
-          success: false, 
-          message: 'Failed to create order',
-          error: orderError.message 
+          error: 'Failed to create order',
+          details: insertError.message,
+          code: insertError.code
         },
         { status: 500 }
-      )
+      );
     }
 
-    console.log('Order created successfully:', order)
-
-    // Insert order items for satuan orders
-    if (serviceType === 'satuan' && items?.length > 0) {
-      const orderItems = items.map((item: any) => ({
-        order_id: order.id,
-        item_type_id: item.itemTypeId,
-        quantity: item.quantity,
-        price: item.pricePerItem,
-        total_price: item.totalPrice
-      }))
-
-      console.log('Order items to insert:', JSON.stringify(orderItems, null, 2))
-
-      const { error: itemsError } = await supabaseAdmin
-        .from('order_items')
-        .insert(orderItems)
-
-      if (itemsError) {
-        console.error('Error creating order items:', itemsError)
-        // Don't fail the whole order for this
-      }
-    }
+    console.log('Order created successfully:', order);
 
     return NextResponse.json({
       success: true,
-      order: {
-        id: order.id,
-        order_number: order.order_number,
-        total_amount: order.total_amount,
-        status: order.status,
-        payment_status: order.payment_status
-      }
-    })
-  } catch (error) {
-    console.error('Unexpected error in order creation:', error)
+      order: order,
+      message: 'Order created successfully'
+    });
+
+  } catch (error: any) {
+    console.error('Error in order creation:', error);
     return NextResponse.json(
       { 
-        success: false, 
-        message: 'Internal server error',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Internal server error',
+        details: error.message
       },
       { status: 500 }
-    )
+    );
   }
 }
