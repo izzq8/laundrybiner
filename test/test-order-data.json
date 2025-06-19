@@ -1,0 +1,28 @@
+{
+  "orderData": {
+    "order_id": "TEST-ORDER-123",
+    "service_type": "kiloan",
+    "weight": 5,
+    "address": "Jl. Test Street No. 123, Jakarta",
+    "pickup_date": "2025-06-20",
+    "pickup_time": "10:00",
+    "contact_name": "John Doe",
+    "contact_phone": "08123456789",
+    "notes": "Test order",
+    "total_price": 25000,
+    "customer_details": {
+      "email": "test@example.com",
+      "name": "John Doe",
+      "phone": "08123456789"
+    }
+  },
+  "paymentResult": {
+    "transaction_status": "settlement",
+    "order_id": "TEST-ORDER-123",
+    "payment_type": "qris",
+    "gross_amount": "25000",
+    "transaction_id": "TXN-123456789",
+    "fraud_status": "accept",
+    "transaction_time": "2025-06-18T10:00:00Z"
+  }
+}

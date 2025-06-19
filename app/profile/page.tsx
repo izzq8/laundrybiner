@@ -13,6 +13,17 @@ import { signOut, getCurrentUser, getUserProfile, updateUserProfile, supabase } 
 import { useToast } from "@/components/ui/use-toast"
 import { AddressDialog } from "@/components/address-dialog"
 
+interface Address {
+  id: string;
+  label?: string;
+  is_default: boolean;
+  address?: string;
+  address_line?: string;
+  city?: string;
+  postal_code?: string;
+  notes?: string;
+}
+
 export default function ProfilePage() {
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
@@ -23,20 +34,12 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState({
     name: "",
     email: "",
-    phone: "",
-  })
+    phone: "",  })
   // Add state for address dialog
   const [isAddressDialogOpen, setIsAddressDialogOpen] = useState(false)
-    const [addresses, setAddresses] = useState<Array<{
-    id: string;
-    address?: string;
-    address_line?: string;
-    city?: string;
-    postal_code?: string;
-    notes?: string;
-    label?: string;
-    is_default: boolean;
-  }>>([]);// Fetch user data from Supabase
+  const [addresses, setAddresses] = useState<Address[]>([]) // Menggunakan interface Address yang sudah didefinisikan
+  
+  // Fetch user data from Supabase
   useEffect(() => {
     const fetchUserData = async () => {
       try {

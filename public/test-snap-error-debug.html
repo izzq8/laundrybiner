@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Midtrans Snap Error</title>
+    <script type="text/javascript" src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key="SB-Mid-client-mNdxM5MY-ItvKEFT"></script>
+</head>
+<body>
+    <div style="padding: 20px; font-family: Arial, sans-serif;">
+        <h2>Test Midtrans Snap Error Debug</h2>
+        
+        <div id="status" style="margin: 20px 0; padding: 10px; background: #f5f5f5; border-radius: 5px;">
+            Status: Checking Snap...
+        </div>
+        
+        <button id="testButton" onclick="testSnapPayment()" disabled style="padding: 10px 20px; margin: 10px 0; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            Test Snap Payment
+        </button>
+        
+        <button onclick="generateTestToken()" style="padding: 10px 20px; margin: 10px 0; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            Generate Test Token
+        </button>
+        
+        <div id="logs" style="margin: 20px 0; padding: 10px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 5px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; white-space: pre-wrap;"></div>
+    </div>
+
+    <script>
+        let testToken = null;
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logDiv = document.getElementById('logs');
+            logDiv.textContent += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function updateStatus(message, color = '#333') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.style.color = color;
+        }
+
+        // Check if Snap is loaded
+        function checkSnapLoaded() {
+            log('Checking if Snap is loaded...');
+            
+            if (typeof window.snap !== 'undefined') {
+                log('✅ Snap object found');
+                updateStatus('Snap loaded successfully', 'green');
+                
+                if (typeof window.snap.pay === 'function') {
+                    log('✅ snap.pay method available');
+                    document.getElementById('testButton').disabled = false;
+                } else {
+                    log('❌ snap.pay method not available');
+                    updateStatus('Snap loaded but pay method not available', 'red');
+                }
+            } else {
+                log('❌ Snap object not found');
+                updateStatus('Snap not loaded', 'red');
+                
+                // Check if script is loaded
+                const snapScript = document.querySelector('script[src*="snap.js"]');
+                if (snapScript) {
+                    log('📄 Snap script element found, retrying in 1 second...');
+                    setTimeout(checkSnapLoaded, 1000);
+                } else {
+                    log('❌ Snap script element not found');
+                }
+            }
+        }
+
+        // Generate test token
+        async function generateTestToken() {
+            log('Generating test token...');
+            
+            const testPayload = {
+                order_id: 'TEST-' + Date.now(),
+                amount: 10000,
+                customer_details: {
+                    first_name: 'Test',
+                    last_name: 'User',
+                    email: 'test@example.com',
+                    phone: '+62812345678'
+                },
+                item_details: [{
+                    id: 'test-item',
+                    price: 10000,
+                    quantity: 1,
+                    name: 'Test Item'
+                }]
+            };
+
+            try {
+                const response = await fetch('/api/payment/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testPayload)
+                });
+
+                const result = await response.json();
+                
+                if (result.success && result.token) {
+                    testToken = result.token;
+                    log('✅ Test token generated: ' + testToken.substring(0, 20) + '...');
+                    document.getElementById('testButton').disabled = false;
+                } else {
+                    log('❌ Failed to generate token: ' + (result.message || 'Unknown error'));
+                }
+            } catch (error) {
+                log('❌ Error generating token: ' + error.message);
+            }
+        }
+
+        // Test Snap payment
+        function testSnapPayment() {
+            if (!testToken) {
+                log('❌ No test token available. Generate one first.');
+                return;
+            }
+            
+            if (typeof window.snap === 'undefined') {
+                log('❌ Snap not loaded');
+                return;
+            }
+
+            log('🚀 Opening Snap payment...');
+            
+            try {
+                window.snap.pay(testToken, {
+                    onSuccess: function(result) {
+                        log('✅ Payment Success: ' + JSON.stringify(result, null, 2));
+                    },
+                    onPending: function(result) {
+                        log('⏳ Payment Pending: ' + JSON.stringify(result, null, 2));
+                    },
+                    onError: function(result) {
+                        log('❌ Payment Error: ' + JSON.stringify(result, null, 2));
+                    },
+                    onClose: function() {
+                        log('🔒 Payment popup closed');
+                    }
+                });
+                
+                log('✅ snap.pay called successfully');
+                
+            } catch (error) {
+                log('❌ Error calling snap.pay: ' + error.message);
+                log('Error details: ' + JSON.stringify(error, null, 2));
+            }
+        }
+
+        // Check snap loading on page load
+        window.addEventListener('load', function() {
+            log('Page loaded, checking Snap...');
+            checkSnapLoaded();
+        });
+
+        // Also check immediately in case already loaded
+        if (document.readyState === 'complete') {
+            checkSnapLoaded();
+        }
+    </script>
+</body>
+</html>

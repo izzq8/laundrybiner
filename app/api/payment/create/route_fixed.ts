@@ -23,47 +23,22 @@ export async function POST(request: NextRequest) {
         success: false,
         message: "Payment service configuration error",
       })
-    }    // Ensure item_details is valid and all price/quantity are numbers
-    const safeItemDetails = Array.isArray(item_details) && item_details.length > 0
+    }
+
+    // Ensure item_details is valid and all price/quantity are numbers
+    const safeItemDetails = Array.isArray(item_details)
       ? item_details.map((item) => ({
           id: String(item.id),
           name: String(item.name),
           price: Number(item.price),
           quantity: Number(item.quantity),
         }))
-      : [
-          {
-            id: "laundry-service",
-            name: "Layanan Laundry",
-            price: Number(amount),
-            quantity: 1,
-          }
-        ]    // Validate that total item_details price matches gross_amount
-    const totalItemPrice = safeItemDetails.reduce((total, item) => total + (item.price * item.quantity), 0)
-    if (totalItemPrice !== Number(amount)) {
-      console.warn(`Item details total (${totalItemPrice}) doesn't match gross amount (${amount}). Adjusting item details.`)
-      // Adjust the first item price to match the total
-      if (safeItemDetails.length > 0) {
-        safeItemDetails[0].price = Number(amount)
-        safeItemDetails[0].quantity = 1
-      }
-    }
+      : []
 
-    // Final validation for QRIS compatibility
-    const finalTotalItemPrice = safeItemDetails.reduce((total, item) => total + (item.price * item.quantity), 0)
-    if (finalTotalItemPrice !== Number(amount)) {
-      console.error(`CRITICAL: Final item details total (${finalTotalItemPrice}) still doesn't match gross amount (${amount})`)
-      return NextResponse.json({
-        success: false,
-        message: "Item details validation failed for QRIS compatibility",
-      })
-    }    console.log("=== CREATING MIDTRANS PAYMENT ===")
+    console.log("Creating payment Snap")
     console.log("Order ID:", order_id)
-    console.log("Gross Amount:", amount)
-    console.log("Customer Details:", JSON.stringify(customer_details, null, 2))
+    console.log("Amount:", amount)
     console.log("Safe item_details:", JSON.stringify(safeItemDetails, null, 2))
-    console.log("Total item price verification:", safeItemDetails.reduce((total, item) => total + (item.price * item.quantity), 0))
-    console.log("=== END PAYMENT DEBUG INFO ===")
 
     // Prepare the correct payload format for Midtrans Snap
     const payload = {
@@ -72,28 +47,27 @@ export async function POST(request: NextRequest) {
         gross_amount: Number(amount),
       },
       customer_details: {
-        first_name: customer_details?.first_name || "Customer",
-        last_name: customer_details?.last_name || "",
-        email: customer_details?.email || "customer@laundrybiner.com",
-        phone: customer_details?.phone || "08123456789",
+        first_name: customer_details.first_name || "Customer",
+        last_name: customer_details.last_name || "",
+        email: customer_details.email || "customer@example.com",
+        phone: customer_details.phone || "08123456789",
         billing_address: {
-          first_name: customer_details?.first_name || "Customer",
-          last_name: customer_details?.last_name || "",
-          address: customer_details?.billing_address?.address || "Jakarta",
-          city: customer_details?.billing_address?.city || "Jakarta",
-          postal_code: customer_details?.billing_address?.postal_code || "12345",
+          first_name: customer_details.first_name || "Customer",
+          last_name: customer_details.last_name || "",
+          address: customer_details.billing_address?.address || "Jakarta",
+          city: customer_details.billing_address?.city || "Jakarta",
+          postal_code: customer_details.billing_address?.postal_code || "12345",
           country_code: "IDN",
         },
       },
       item_details: safeItemDetails,
       // Add payment method configuration for better QRIS support
       enabled_payments: [
-        "qris", "gopay", "shopeepay", "dana", "linkaja", "ovo",
-        "credit_card", "bca_va", "bni_va", "bri_va", "echannel", "permata_va", "other_va"
-      ],
-      // QRIS specific configuration
+        "credit_card", "bca_va", "bni_va", "bri_va", "echannel", "permata_va",
+        "other_va", "gopay", "shopeepay", "dana", "linkaja", "jenius", "qris"
+      ],      // QRIS specific configuration
       custom_expiry: {
-        expiry_duration: 1440, // 24 hours in minutes
+        expiry_duration: 60,
         unit: "minute"
       },
       // Callbacks untuk redirect URLs

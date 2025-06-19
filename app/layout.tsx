@@ -19,9 +19,16 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>        <AuthProvider>
+  return (    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          src="https://app.sandbox.midtrans.com/snap/snap.js"
+          data-client-key="SB-Mid-client-kx6P3TnxLfHmLuFl"
+          async
+        />
+      </head>
+      <body className={inter.className}>
+        <AuthProvider>
           <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
             {children}
             <Toaster />

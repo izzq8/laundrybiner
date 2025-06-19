@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Midtrans Snap Loading</title>
+    <script
+        type="text/javascript"
+        src="https://app.sandbox.midtrans.com/snap/snap.js"
+        data-client-key="SB-Mid-client-mNdxM5MY-ItvKEFT">
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Midtrans Snap Loading</h1>
+    
+    <div id="status"></div>
+    
+    <button id="testButton" onclick="testSnap()" disabled>Test Snap Payment</button>
+    
+    <div id="logs"></div>
+
+    <script>
+        let statusDiv = document.getElementById('status');
+        let logsDiv = document.getElementById('logs');
+        let testButton = document.getElementById('testButton');
+        
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `status ${type}`;
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logsDiv.appendChild(logEntry);
+        }
+        
+        function checkSnapStatus() {
+            addLog('Checking Midtrans Snap status...');
+            
+            if (typeof window.snap !== 'undefined') {
+                addLog('✅ Midtrans Snap loaded successfully!', 'success');
+                statusDiv.innerHTML = '<div class="status success">✅ Midtrans Snap is ready</div>';
+                testButton.disabled = false;
+                return true;
+            } else {
+                addLog('❌ Midtrans Snap not found', 'error');
+                statusDiv.innerHTML = '<div class="status error">❌ Midtrans Snap not loaded</div>';
+                return false;
+            }
+        }
+        
+        function testSnap() {
+            addLog('Testing Snap payment with dummy token...');
+            
+            // Use a test token (this will fail but should not cause the postMessage error)
+            const dummyToken = 'test-token-123';
+            
+            try {
+                window.snap.pay(dummyToken, {
+                    onSuccess: function(result) {
+                        addLog('Payment success: ' + JSON.stringify(result), 'success');
+                    },
+                    onPending: function(result) {
+                        addLog('Payment pending: ' + JSON.stringify(result), 'warning');
+                    },
+                    onError: function(result) {
+                        addLog('Payment error (expected): ' + JSON.stringify(result), 'warning');
+                    },
+                    onClose: function() {
+                        addLog('Payment popup closed', 'warning');
+                    }
+                });
+            } catch (error) {
+                addLog('Error calling snap.pay: ' + error.message, 'error');
+            }
+        }
+        
+        // Check status immediately
+        addLog('Page loaded, checking Snap status...');
+        checkSnapStatus();
+        
+        // Check periodically for up to 10 seconds
+        let attempts = 0;
+        const maxAttempts = 50;
+        const checkInterval = setInterval(() => {
+            attempts++;
+            if (checkSnapStatus() || attempts >= maxAttempts) {
+                clearInterval(checkInterval);
+                if (attempts >= maxAttempts && typeof window.snap === 'undefined') {
+                    addLog('❌ Timeout: Midtrans Snap failed to load after 5 seconds', 'error');
+                }
+            }
+        }, 100);
+    </script>
+</body>
+</html>

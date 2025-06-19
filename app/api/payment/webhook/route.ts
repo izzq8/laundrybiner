@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
-import { createClient } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase"
 
 // Midtrans configuration - Using your sandbox credentials
 const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || "SB-Mid-server-bS9phW7kMqLO0jGb3Q9n7INz"
@@ -31,10 +31,8 @@ export async function POST(request: NextRequest) {
     // Extract transaction details
     const { transaction_status, order_id, payment_type, fraud_status, transaction_time, gross_amount: amount } = body
 
-    console.log(`SANDBOX Webhook - Order ${order_id}: ${transaction_status} (${payment_type})`)
-
-    // Initialize Supabase client
-    const supabase = createClient()
+    console.log(`SANDBOX Webhook - Order ${order_id}: ${transaction_status} (${payment_type})`)    // Initialize Supabase client
+    const supabase = supabaseAdmin
 
     // Determine order status based on transaction status
     let orderStatus = "pending"
@@ -51,37 +49,108 @@ export async function POST(request: NextRequest) {
     } else if (transaction_status === "pending") {
       orderStatus = "pending"
       paymentStatus = "pending"
+    }    // Update order in database - try multiple approaches to match order
+    console.log(`Attempting to update order with order_id: ${order_id}`)
+    
+    let updateSuccess = false
+    let orderData = null
+
+    // Approach 1: Try to update by midtrans_order_id or midtrans_transaction_id
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .update({
+          status: orderStatus,
+          payment_status: paymentStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .or(`midtrans_order_id.eq.${order_id},midtrans_transaction_id.eq.${order_id}`)
+        .select()
+
+      if (!error && data && data.length > 0) {
+        updateSuccess = true
+        orderData = data
+        console.log(`Direct match update successful for order_id: ${order_id}`)
+      }
+    } catch (error) {
+      console.log("Direct match failed, trying fallback approaches")
     }
 
-    // Update order in database
-    const { error: orderError } = await supabase
-      .from("orders")
-      .update({
-        status: orderStatus,
-        payment_status: paymentStatus,
-        payment_method: payment_type,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("order_id", order_id)
+    // Approach 2: If direct match failed, try to extract order number from order_id
+    if (!updateSuccess) {
+      try {
+        // Extract order number pattern (e.g., from "LDY-20250619-0001-1734567890123")
+        const orderIdParts = order_id.split('-')
+        if (orderIdParts.length >= 3) {
+          const orderNumber = `${orderIdParts[0]}-${orderIdParts[1]}-${orderIdParts[2]}`
+          console.log(`Trying fallback with extracted order_number: ${orderNumber}`)
+          
+          const { data, error } = await supabase
+            .from("orders")
+            .update({
+              status: orderStatus,
+              payment_status: paymentStatus,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("order_number", orderNumber)
+            .select()
+            
+          if (!error && data && data.length > 0) {
+            updateSuccess = true
+            orderData = data
+            console.log(`Fallback update successful for order_number: ${orderNumber}`)
+          }
+        }
+      } catch (error) {
+        console.log("Order number extraction failed")
+      }
+    }
 
-    if (orderError) {
-      console.error("Error updating order status:", orderError)
+    // Approach 3: If still no success, try pattern matching
+    if (!updateSuccess) {
+      try {
+        console.log(`Trying pattern matching for order_id: ${order_id}`)
+        const { data, error } = await supabase
+          .from("orders")
+          .update({
+            status: orderStatus,
+            payment_status: paymentStatus,
+            updated_at: new Date().toISOString(),
+          })
+          .or(`order_number.ilike.%${order_id.split('-')[0]}%,order_number.ilike.%${order_id.split('-')[1]}%`)
+          .select()
+          
+        if (!error && data && data.length > 0) {
+          updateSuccess = true
+          orderData = data
+          console.log(`Pattern matching update successful`)
+        }
+      } catch (error) {
+        console.log("Pattern matching failed")
+      }
+    }
+
+    if (updateSuccess && orderData) {
+      console.log(`Order updated successfully to status: ${orderStatus}, payment: ${paymentStatus}`)
+      console.log(`Updated ${orderData.length} order(s):`, orderData)
     } else {
-      console.log(`Order ${order_id} updated to status: ${orderStatus}`)
-    }
+      console.error(`Failed to update order with order_id: ${order_id}`)
+    }// Log webhook for debugging (optional - only if table exists)
+    try {
+      const { error: logError } = await supabase.from("payment_logs").insert({
+        order_id: order_id,
+        transaction_status: transaction_status,
+        payment_type: payment_type,
+        amount: amount,
+        webhook_data: body,
+        processed_at: new Date().toISOString(),
+      })
 
-    // Log webhook for debugging
-    const { error: logError } = await supabase.from("payment_logs").insert({
-      order_id: order_id,
-      transaction_status: transaction_status,
-      payment_type: payment_type,
-      amount: amount,
-      webhook_data: body,
-      processed_at: new Date().toISOString(),
-    })
-
-    if (logError) {
-      console.error("Error logging webhook:", logError)
+      if (logError) {
+        console.error("Error logging webhook (table might not exist):", logError)
+      }
+    } catch (logError) {
+      console.log("Payment logs table doesn't exist, skipping log")
     }
 
     return NextResponse.json({
@@ -92,11 +161,10 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Webhook processing error:", error)
-    return NextResponse.json(
-      {
+    return NextResponse.json(      {
         success: false,
         message: "Internal server error",
-        error: error.message,
+        error: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )
