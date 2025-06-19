@@ -6,79 +6,21 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Sparkles, Plus, Package, Clock, CheckCircle, Truck, History, User, Bell, RefreshCw } from "lucide-react"
-import { useAuth } from "@/components/auth-provider"
+import { createClient } from "@/lib/supabase"
 
 interface Order {
   id: string;
-  order_number?: string;
+  status_color: string;
   status: string;
-  status_color?: string;
-  items?: string;
-  pickup_date?: string;
-  total?: number;
-  total_amount?: number;
-  customer_name?: string;
-  created_at: string;
-  service_types?: {
-    name: string;
-    type: string;
-  };
+  items: string;
+  pickup_date: string;
+  total: number;
 }
 
 export default function DashboardPage() {
-  const { user, getAuthToken } = useAuth()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)  // Fetch recent orders (latest 3 orders)
-  const fetchRecentOrders = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      
-      // Get auth token
-      const headers: HeadersInit = {
-        'Cache-Control': 'no-cache'
-      }
-      
-      try {
-        const authToken = await getAuthToken()
-        if (authToken) {
-          headers['Authorization'] = `Bearer ${authToken}`
-        }
-      } catch (authError) {
-        console.log('Could not get auth token:', authError)
-      }
-      
-      const response = await fetch('/api/orders?limit=3', {
-        method: 'GET',
-        headers
-      })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const data = await response.json()
-      
-      if (data.success && data.orders) {
-        setOrders(data.orders)
-      } else {
-        console.warn('No orders found or API returned false success')
-        setOrders([])
-      }
-    } catch (error) {
-      console.error('Error fetching recent orders:', error)
-      setError(error instanceof Error ? error.message : 'Failed to fetch orders')
-      setOrders([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchRecentOrders()
-  }, [])
-
+  const [error, setError] = useState<string | null>(null)
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "Menunggu pickup":
@@ -88,11 +30,60 @@ export default function DashboardPage() {
       case "Dalam pengiriman":
         return <Truck className="w-4 h-4" />
       case "Selesai":
+      case "Completed":
         return <CheckCircle className="w-4 h-4" />
       default:
         return <Clock className="w-4 h-4" />
     }
   }
+
+  const fetchRecentOrders = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const supabase = createClient('', '')
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      let response
+      if (user) {
+        // Fetch orders for authenticated user
+        response = await fetch('/api/orders?limit=3', {
+          headers: {
+            'Cache-Control': 'no-store',
+          },
+        })
+      } else {
+        // Fallback: fetch demo orders if not authenticated
+        response = await fetch('/api/orders?demo=true&limit=3', {
+          headers: {
+            'Cache-Control': 'no-store',
+          },
+        })
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      if (data.success && Array.isArray(data.orders)) {
+        setOrders(data.orders.slice(0, 3)) // Limit to 3 recent orders for dashboard
+      } else {
+        setOrders([])
+      }
+    } catch (error) {
+      console.error('Error fetching recent orders:', error)
+      setError('Failed to load recent orders')
+      setOrders([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchRecentOrders()
+  }, [])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -204,30 +195,23 @@ export default function DashboardPage() {
                     key={order.id}
                     className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
                   >
-                    <div className="flex items-center gap-4">                      <div
-                        className={`w-10 h-10 ${order.status_color || 'bg-gray-500'} rounded-lg flex items-center justify-center text-white`}
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={`w-10 h-10 ${order.status_color} rounded-lg flex items-center justify-center text-white`}
                       >
                         {getStatusIcon(order.status)}
                       </div>
                       <div>
-                        <h4 className="font-semibold text-gray-900">
-                          {order.order_number || order.id}
-                        </h4>
-                        <p className="text-sm text-gray-600">
-                          {order.items || order.service_types?.name || 'Layanan laundry'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {order.pickup_date ? `Pickup: ${order.pickup_date}` : 
-                           order.created_at ? `Dibuat: ${new Date(order.created_at).toLocaleDateString('id-ID')}` : 
-                           'Tanggal tidak tersedia'}
-                        </p>
+                        <h4 className="font-semibold text-gray-900">{order.id}</h4>
+                        <p className="text-sm text-gray-600">{order.items}</p>
+                        <p className="text-xs text-gray-500">Pickup: {order.pickup_date}</p>
                       </div>
                     </div>
-                    <div className="text-right">                      <Badge variant="secondary" className="mb-2">
+                    <div className="text-right">
+                      <Badge variant="secondary" className="mb-2">
                         {order.status}
-                      </Badge>                      <p className="text-sm font-semibold text-gray-900">
-                        Rp {(order.total_amount || order.total || 0).toLocaleString("id-ID")}
-                      </p>
+                      </Badge>
+                      <p className="text-sm font-semibold text-gray-900">Rp {order.total.toLocaleString("id-ID")}</p>
                     </div>
                   </div>
                 ))}

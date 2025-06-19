@@ -9,11 +9,13 @@ import { supabase } from "@/lib/supabase"
 interface AuthContextType {
   user: User | null
   loading: boolean
+  getAuthToken: () => Promise<string | null>
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  getAuthToken: async () => null,
 })
 
 export const useAuth = () => {
@@ -27,6 +29,12 @@ export const useAuth = () => {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Function to get current auth token
+  const getAuthToken = async (): Promise<string | null> => {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token || null
+  }
 
   useEffect(() => {
     // Get initial session
@@ -68,5 +76,5 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  return <AuthContext.Provider value={{ user, loading }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, loading, getAuthToken }}>{children}</AuthContext.Provider>
 }

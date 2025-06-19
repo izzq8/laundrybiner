@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Calendar, Clock, MapPin, Phone, User, Package, Minus, Plus, Trash2, ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/components/auth-provider"
 
 interface ServiceType {
   id: string
@@ -56,6 +57,7 @@ interface OrderFormData {
 
 export default function OrderPage() {
   const router = useRouter()
+  const { getAuthToken } = useAuth()
   const [loading, setLoading] = useState(false)
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])
   const [itemTypes, setItemTypes] = useState<ItemType[]>([])
@@ -275,13 +277,23 @@ export default function OrderPage() {
         contactPhone: orderData.contactPhone,
         notes: orderData.notes,
         transactionId: midtransOrderId
+      }      // Get auth token for order creation
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      }
+      
+      try {
+        const authToken = await getAuthToken()
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`
+        }
+      } catch (error) {
+        console.log('Could not get auth token for order creation:', error)
       }
 
       const createResponse = await fetch('/api/orders/new', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(orderPayload),
       })
 
