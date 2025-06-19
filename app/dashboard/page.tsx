@@ -1,71 +1,23 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Sparkles, Plus, Package, Clock, CheckCircle, Truck, History, User, Bell, RefreshCw } from "lucide-react"
+import { Sparkles, Plus, Package, Clock, CheckCircle, Truck, History, User, Bell } from "lucide-react"
 
 interface Order {
   id: string;
-  order_number?: string;
+  status_color: string;
   status: string;
-  status_color?: string;
-  items?: string;
-  pickup_date?: string;
-  total?: number;
-  total_amount?: number;
-  customer_name?: string;
-  created_at: string;
-  service_types?: {
-    name: string;
-    type: string;
-  };
+  items: string;
+  pickup_date: string;
+  total: number;
 }
 
 export default function DashboardPage() {
-  const [orders, setOrders] = useState<Order[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // Fetch recent orders (latest 3 orders)
-  const fetchRecentOrders = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      
-      const response = await fetch('/api/orders?limit=3&demo=true', {
-        method: 'GET',
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
-      })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const data = await response.json()
-      
-      if (data.success && data.orders) {
-        setOrders(data.orders)
-      } else {
-        console.warn('No orders found or API returned false success')
-        setOrders([])
-      }
-    } catch (error) {
-      console.error('Error fetching recent orders:', error)
-      setError(error instanceof Error ? error.message : 'Failed to fetch orders')
-      setOrders([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchRecentOrders()
-  }, [])
+  const [orders] = useState<Order[]>([])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -117,7 +69,7 @@ export default function DashboardPage() {
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Selamat Datang!</h2>
           <p className="text-gray-600">Kelola pesanan laundry Anda dengan mudah</p>
         </div>        {/* Quick Actions */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <Link href="/order">
             <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 border-dashed border-[#0F4C75]/20 hover:border-[#0F4C75]/40">
               <CardContent className="p-6 text-center">
@@ -134,10 +86,9 @@ export default function DashboardPage() {
             <Card className="hover:shadow-lg transition-shadow cursor-pointer">
               <CardContent className="p-6 text-center">
                 <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <Package className="w-6 h-6 text-blue-600" />
-                </div>
-                <h3 className="font-semibold text-gray-900 mb-2">Status Order</h3>
-                <p className="text-sm text-gray-600">Lacak pesanan aktif</p>
+                  <Package className="w-6 h-6 text-blue-600" />                </div>
+                <h3 className="font-semibold text-gray-900 mb-2">Pesanan Saya</h3>
+                <p className="text-sm text-gray-600">Status & riwayat pesanan</p>
               </CardContent>
             </Card>
           </Link>
@@ -169,53 +120,32 @@ export default function DashboardPage() {
                 </Button>
               </Link>
             </div>
-          </CardHeader>          <CardContent>
-            {loading ? (
-              <div className="text-center py-12">
-                <RefreshCw className="w-8 h-8 text-gray-300 mx-auto mb-4 animate-spin" />
-                <p className="text-gray-600">Memuat pesanan...</p>
-              </div>
-            ) : error ? (
-              <div className="text-center py-12">
-                <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Gagal memuat pesanan</h3>
-                <p className="text-gray-600 mb-4">{error}</p>
-                <Button onClick={fetchRecentOrders} variant="outline" size="sm">
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Coba Lagi
-                </Button>
-              </div>
-            ) : orders.length > 0 ? (
+          </CardHeader>
+          <CardContent>
+            {orders.length > 0 ? (
               <div className="space-y-4">
                 {orders.map((order) => (
                   <div
                     key={order.id}
                     className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
                   >
-                    <div className="flex items-center gap-4">                      <div
-                        className={`w-10 h-10 ${order.status_color || 'bg-gray-500'} rounded-lg flex items-center justify-center text-white`}
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={`w-10 h-10 ${order.status_color} rounded-lg flex items-center justify-center text-white`}
                       >
                         {getStatusIcon(order.status)}
                       </div>
                       <div>
-                        <h4 className="font-semibold text-gray-900">
-                          {order.order_number || order.id}
-                        </h4>
-                        <p className="text-sm text-gray-600">
-                          {order.items || order.service_types?.name || 'Layanan laundry'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {order.pickup_date ? `Pickup: ${order.pickup_date}` : 
-                           order.created_at ? `Dibuat: ${new Date(order.created_at).toLocaleDateString('id-ID')}` : 
-                           'Tanggal tidak tersedia'}
-                        </p>
+                        <h4 className="font-semibold text-gray-900">{order.id}</h4>
+                        <p className="text-sm text-gray-600">{order.items}</p>
+                        <p className="text-xs text-gray-500">Pickup: {order.pickup_date}</p>
                       </div>
                     </div>
-                    <div className="text-right">                      <Badge variant="secondary" className="mb-2">
+                    <div className="text-right">
+                      <Badge variant="secondary" className="mb-2">
                         {order.status}
-                      </Badge>                      <p className="text-sm font-semibold text-gray-900">
-                        Rp {(order.total_amount || order.total || 0).toLocaleString("id-ID")}
-                      </p>
+                      </Badge>
+                      <p className="text-sm font-semibold text-gray-900">Rp {order.total.toLocaleString("id-ID")}</p>
                     </div>
                   </div>
                 ))}
@@ -240,11 +170,10 @@ export default function DashboardPage() {
         <div className="grid grid-cols-3 gap-1">
           <Link href="/dashboard" className="flex flex-col items-center py-3 text-[#0F4C75]">
             <Package className="w-5 h-5 mb-1" />
-            <span className="text-xs">Home</span>
-          </Link>
+            <span className="text-xs">Home</span>          </Link>
           <Link href="/orders" className="flex flex-col items-center py-3 text-gray-600">
-            <Clock className="w-5 h-5 mb-1" />
-            <span className="text-xs">Status</span>
+            <History className="w-5 h-5 mb-1" />
+            <span className="text-xs">Pesanan</span>
           </Link>
           <Link href="/profile" className="flex flex-col items-center py-3 text-gray-600">
             <User className="w-5 h-5 mb-1" />
