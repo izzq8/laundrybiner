@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar, Clock, MapPin, Phone, User, Package, CheckCircle, Truck, ArrowLeft, Receipt, CreditCard, Timer } from "lucide-react"
 import { CountdownTimer, useCanMakePayment } from "@/components/countdown-timer"
+import { useAutoPaymentCheck } from '@/hooks/useAutoPaymentCheck'
 
 interface Order {
   id: string
@@ -41,13 +42,28 @@ export default function OrderDetailPage() {  const params = useParams()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  
   // Use the hook to determine if payment can be made
   const canMakePayment = useCanMakePayment(
     order?.created_at || '', 
     order?.payment_status || '', 
     order?.status || ''
   )
+
+  // Add auto payment check hook
+  const { isChecking, lastChecked, checkNow } = useAutoPaymentCheck({
+    orderId: order?.id || '',
+    paymentStatus: order?.payment_status || 'pending',
+    orderStatus: order?.status || 'pending',
+    enabled: !!order && order.payment_status === 'pending',
+    intervalMs: 30000, // Check every 30 seconds
+    onStatusUpdate: async (newStatus) => {
+      console.log(`🔄 Payment status updated to: ${newStatus}`)
+      // Refresh order data when payment status changes
+      if (order?.id) {
+        await fetchOrderDetail(order.id)
+      }
+    },
+  })
 
   useEffect(() => {
     if (params.orderId) {
@@ -158,6 +174,22 @@ export default function OrderDetailPage() {  const params = useParams()
       console.log('Payment API response data:', data)
       
       if (data.success && data.payment_url) {
+        // Update order with midtrans order ID before redirecting
+        try {
+          await fetch(`/api/orders/update-payment-status`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              orderId: order.id,
+              midtransOrderId: uniqueOrderId,
+            }),
+          })
+        } catch (error) {
+          console.error('Failed to update order with midtrans order ID:', error)
+        }
+        
         console.log('Redirecting to payment URL:', data.payment_url)
         // Redirect to Midtrans payment page
         window.location.href = data.payment_url
@@ -171,13 +203,34 @@ export default function OrderDetailPage() {  const params = useParams()
       setRefreshing(false)
     }
   }
-  
-  const refreshPaymentStatus = async () => {
+    const refreshPaymentStatus = async () => {
     if (!order) return
     
     setRefreshing(true)
     try {
-      await fetchOrderDetail(order.id)
+      // Call manual status update endpoint
+      const response = await fetch('/api/payment/manual-status-update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ orderId: order.id }),
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        console.log('Payment status updated:', data)
+        // Refresh order data
+        await fetchOrderDetail(order.id)
+        alert('Status pembayaran berhasil diperbarui!')
+      } else {
+        console.error('Failed to update payment status:', data.message)
+        alert('Gagal memperbarui status: ' + data.message)
+      }
+    } catch (error) {
+      console.error('Error updating payment status:', error)
+      alert('Gagal memperbarui status pembayaran')
     } finally {
       setRefreshing(false)
     }
@@ -576,6 +629,30 @@ export default function OrderDetailPage() {  const params = useParams()
                           {refreshing ? 'Memproses...' : 'Bayar Sekarang'}
                         </Button>
                       )}
+                        {/* Refresh Payment Status Button - Always visible for development */}
+                      <Button
+                        onClick={refreshPaymentStatus}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                        variant="outline"
+                        disabled={refreshing || isChecking}
+                      >
+                        {refreshing ? 'Memperbarui...' : isChecking ? 'Auto-checking...' : 'Perbarui Status Pembayaran'}
+                      </Button>
+                      
+                      {/* Auto-check status indicator */}
+                      {order.payment_status === 'pending' && (
+                        <div className="text-xs text-center text-gray-500 bg-gray-50 p-2 rounded-lg">
+                          <div className="flex items-center justify-center gap-1">
+                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                            <span>Auto-checking payment status...</span>
+                          </div>
+                          {lastChecked && (
+                            <div className="mt-1">
+                              Last checked: {lastChecked.toLocaleTimeString()}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       
                       <Button
                         onClick={() => router.push('/orders')}
@@ -590,16 +667,31 @@ export default function OrderDetailPage() {  const params = useParams()
                       >
                         Beranda
                       </Button>
-                    </div>{/* Refresh Payment Status Button */}
+                    </div>                    {/* Refresh Payment Status Button */}
                     <div className="pt-4 border-t">
                       <Button
-                        onClick={refreshPaymentStatus}
+                        onClick={checkNow}
                         className="w-full"
                         variant="default"
-                        disabled={refreshing}
+                        disabled={refreshing || isChecking}
                       >
-                        {refreshing ? 'Memperbarui...' : 'Perbarui Status Pembayaran'}
+                        {refreshing ? 'Memperbarui...' : isChecking ? 'Checking...' : 'Cek Status Pembayaran Sekarang'}
                       </Button>
+                      
+                      {/* Auto-check status indicator */}
+                      {order.payment_status === 'pending' && (
+                        <div className="text-xs text-center text-gray-500 mt-2 bg-gray-50 p-2 rounded-lg">
+                          <div className="flex items-center justify-center gap-1">
+                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                            <span>Auto-checking every 30 seconds...</span>
+                          </div>
+                          {lastChecked && (
+                            <div className="mt-1">
+                              Last auto-check: {lastChecked.toLocaleTimeString()}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

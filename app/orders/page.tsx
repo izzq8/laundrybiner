@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar, User, Package, Eye, ArrowLeft, CreditCard } from "lucide-react"
 import { CountdownTimer, useCanMakePayment } from "@/components/countdown-timer"
+import { usePaymentStatusUpdates } from '@/components/auto-payment-service'
 
 interface Order {
   id: string
@@ -102,6 +103,15 @@ export default function OrdersPage() {
       setLoading(false)
     }
   }
+
+  // Listen for payment status updates from background service
+  usePaymentStatusUpdates((data) => {
+    console.log('📢 Payment status update received on orders page:', data)
+    if (data.updated > 0) {
+      // Refresh orders data when payment status changes
+      fetchOrders()
+    }
+  })
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {

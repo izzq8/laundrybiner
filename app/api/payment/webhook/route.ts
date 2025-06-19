@@ -53,9 +53,7 @@ export async function POST(request: NextRequest) {
     console.log(`Attempting to update order with order_id: ${order_id}`)
     
     let updateSuccess = false
-    let orderData = null
-
-    // Approach 1: Try to update by midtrans_order_id or midtrans_transaction_id
+    let orderData = null    // Approach 1: Try to update by midtrans_order_id or midtrans_transaction_id
     try {
       const { data, error } = await supabase
         .from("orders")
@@ -63,6 +61,8 @@ export async function POST(request: NextRequest) {
           status: orderStatus,
           payment_status: paymentStatus,
           updated_at: new Date().toISOString(),
+          midtrans_order_id: order_id, // Store the order_id from webhook
+          midtrans_transaction_id: order_id,
         })
         .or(`midtrans_order_id.eq.${order_id},midtrans_transaction_id.eq.${order_id}`)
         .select()
@@ -74,35 +74,78 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       console.log("Direct match failed, trying fallback approaches")
-    }
-
-    // Approach 2: If direct match failed, try to extract order number from order_id
+    }    // Approach 2: If direct match failed, try to extract order number from order_id
     if (!updateSuccess) {
       try {
         // Extract order number pattern (e.g., from "LDY-20250619-0001-1734567890123")
+        let extractedOrderNumber = null
+        
+        // Try different patterns
         const orderIdParts = order_id.split('-')
         if (orderIdParts.length >= 3) {
-          const orderNumber = `${orderIdParts[0]}-${orderIdParts[1]}-${orderIdParts[2]}`
-          console.log(`Trying fallback with extracted order_number: ${orderNumber}`)
+          extractedOrderNumber = `${orderIdParts[0]}-${orderIdParts[1]}-${orderIdParts[2]}`
+        } else if (order_id.includes('LAUNDRY-')) {
+          // For patterns like "LAUNDRY-1750335432131-2dlv4086j"
+          // Try to find order by partial match
+          const { data: searchResults, error: searchError } = await supabase
+            .from("orders")
+            .select("*")
+            .ilike("order_number", "%LDY%")
+            .order("created_at", { ascending: false })
+            .limit(50)
+
+          if (!searchError && searchResults && searchResults.length > 0) {
+            // Find the most recent order that might match
+            const matchingOrder = searchResults.find(order => {
+              const timeDiff = Math.abs(Date.now() - new Date(order.created_at).getTime())
+              return timeDiff < 24 * 60 * 60 * 1000 // Within 24 hours
+            })
+            
+            if (matchingOrder) {
+              const { data, error } = await supabase
+                .from("orders")
+                .update({
+                  status: orderStatus,
+                  payment_status: paymentStatus,
+                  midtrans_order_id: order_id,
+                  midtrans_transaction_id: order_id,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", matchingOrder.id)
+                .select()
+                
+              if (!error && data && data.length > 0) {
+                updateSuccess = true
+                orderData = data
+                console.log(`Time-based match update successful for order: ${matchingOrder.order_number}`)
+              }
+            }
+          }
+        }
+        
+        if (!updateSuccess && extractedOrderNumber) {
+          console.log(`Trying fallback with extracted order_number: ${extractedOrderNumber}`)
           
           const { data, error } = await supabase
             .from("orders")
             .update({
               status: orderStatus,
               payment_status: paymentStatus,
+              midtrans_order_id: order_id,
+              midtrans_transaction_id: order_id,
               updated_at: new Date().toISOString(),
             })
-            .eq("order_number", orderNumber)
+            .eq("order_number", extractedOrderNumber)
             .select()
             
           if (!error && data && data.length > 0) {
             updateSuccess = true
             orderData = data
-            console.log(`Fallback update successful for order_number: ${orderNumber}`)
+            console.log(`Fallback update successful for order_number: ${extractedOrderNumber}`)
           }
         }
       } catch (error) {
-        console.log("Order number extraction failed")
+        console.log("Order number extraction failed", error)
       }
     }
 

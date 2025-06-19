@@ -5,6 +5,7 @@ import "./globals.css"
 import { AuthProvider } from "@/components/auth-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
+import { AutoPaymentService } from "@/components/auto-payment-service"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -27,9 +28,9 @@ export default function RootLayout({
           async
         />
       </head>
-      <body className={inter.className}>
-        <AuthProvider>
+      <body className={inter.className}>        <AuthProvider>
           <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
+            <AutoPaymentService enabled={true} intervalMinutes={2} />
             {children}
             <Toaster />
           </ThemeProvider>
