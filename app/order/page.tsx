@@ -41,9 +41,14 @@ interface OrderFormData {
   serviceTypeId: string
   weight: number
   items: OrderItem[]
+  pickupOption: 'pickup' | 'dropoff'  // Customer pilih dijemput atau drop off sendiri
   pickupAddress: string
   pickupDate: string
   pickupTime: string
+  deliveryOption: 'delivery' | 'selfpickup'  // Customer pilih diantar atau ambil sendiri
+  deliveryAddress: string
+  deliveryDate: string
+  deliveryTime: string
   contactName: string
   contactPhone: string
   notes: string
@@ -59,9 +64,14 @@ export default function OrderPage() {
     serviceTypeId: '',
     weight: 1,
     items: [],
+    pickupOption: 'pickup',
     pickupAddress: '',
     pickupDate: '',
     pickupTime: '',
+    deliveryOption: 'delivery',
+    deliveryAddress: '',
+    deliveryDate: '',
+    deliveryTime: '',
     contactName: '',
     contactPhone: '',
     notes: ''
@@ -69,6 +79,7 @@ export default function OrderPage() {
 
   const pickupFee = 5000
   const deliveryFee = 5000
+  
   useEffect(() => {
     fetchServiceTypes()
     fetchItemTypes()
@@ -76,9 +87,15 @@ export default function OrderPage() {
     // Set default pickup date to tomorrow
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
+    
+    // Set default delivery date to 3 days from now (typical laundry completion time)
+    const deliveryDate = new Date()
+    deliveryDate.setDate(deliveryDate.getDate() + 3)
+    
     setOrderData(prev => ({
       ...prev,
-      pickupDate: tomorrow.toISOString().split('T')[0]
+      pickupDate: tomorrow.toISOString().split('T')[0],
+      deliveryDate: deliveryDate.toISOString().split('T')[0]
     }))
   }, [])
 
@@ -191,11 +208,21 @@ export default function OrderPage() {
       return orderData.items.reduce((total, item) => total + item.totalPrice, 0)
     }
   }
-
   const calculateTotal = () => {
-    return calculateSubtotal() + pickupFee + deliveryFee
+    let total = calculateSubtotal()
+    
+    // Add pickup fee only if customer chooses pickup service
+    if (orderData.pickupOption === 'pickup') {
+      total += pickupFee
+    }
+    
+    // Add delivery fee only if customer chooses delivery service
+    if (orderData.deliveryOption === 'delivery') {
+      total += deliveryFee
+    }
+    
+    return total
   }
-
   const validateForm = () => {
     if (!orderData.serviceTypeId) return 'Pilih jenis layanan'
     if (orderData.serviceType === 'kiloan' && orderData.weight <= 0) return 'Masukkan berat cucian'
@@ -203,9 +230,16 @@ export default function OrderPage() {
     if (orderData.serviceType === 'satuan' && orderData.items.some(item => !item.itemTypeId)) {
       return 'Lengkapi semua item'
     }
-    if (!orderData.pickupAddress.trim()) return 'Masukkan alamat penjemputan'
-    if (!orderData.pickupDate) return 'Pilih tanggal penjemputan'
-    if (!orderData.pickupTime) return 'Pilih waktu penjemputan'
+    if (orderData.pickupOption === 'pickup' && !orderData.pickupAddress.trim()) {
+      return 'Masukkan alamat penjemputan'
+    }
+    if (orderData.deliveryOption === 'delivery' && !orderData.deliveryAddress.trim()) {
+      return 'Masukkan alamat pengantaran'
+    }
+    if (orderData.pickupOption === 'pickup' && !orderData.pickupDate) return 'Pilih tanggal penjemputan'
+    if (orderData.pickupOption === 'pickup' && !orderData.pickupTime) return 'Pilih waktu penjemputan'
+    if (orderData.deliveryOption === 'delivery' && !orderData.deliveryDate) return 'Pilih tanggal pengantaran'
+    if (orderData.deliveryOption === 'delivery' && !orderData.deliveryTime) return 'Pilih waktu pengantaran'
     if (!orderData.contactName.trim()) return 'Masukkan nama kontak'
     if (!orderData.contactPhone.trim()) return 'Masukkan nomor telepon'
     
@@ -223,16 +257,20 @@ export default function OrderPage() {
 
     try {
       // Generate Midtrans order ID first
-      const midtransOrderId = `LAUNDRY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-      // Create order
+      const midtransOrderId = `LAUNDRY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`      // Create order
       const orderPayload = {
         serviceType: orderData.serviceType,
         serviceTypeId: orderData.serviceTypeId,
         weight: orderData.serviceType === 'kiloan' ? orderData.weight : null,
         items: orderData.serviceType === 'satuan' ? orderData.items : [],
-        pickupAddress: orderData.pickupAddress,        pickupDate: orderData.pickupDate,
-        pickupTime: orderData.pickupTime,
+        pickupOption: orderData.pickupOption,
+        pickupAddress: orderData.pickupOption === 'pickup' ? orderData.pickupAddress : null,        
+        pickupDate: orderData.pickupOption === 'pickup' ? orderData.pickupDate : null,
+        pickupTime: orderData.pickupOption === 'pickup' ? orderData.pickupTime : null,
+        deliveryOption: orderData.deliveryOption,
+        deliveryAddress: orderData.deliveryOption === 'delivery' ? orderData.deliveryAddress : null,
+        deliveryDate: orderData.deliveryOption === 'delivery' ? orderData.deliveryDate : null,
+        deliveryTime: orderData.deliveryOption === 'delivery' ? orderData.deliveryTime : null,
         contactName: orderData.contactName,
         contactPhone: orderData.contactPhone,
         notes: orderData.notes,
@@ -275,22 +313,24 @@ export default function OrderPage() {
               price: item.pricePerItem,
               quantity: item.quantity,
             }))
+      }      // Add pickup and delivery fees based on customer selection
+      if (orderData.pickupOption === 'pickup') {
+        paymentPayload.item_details.push({
+          id: "pickup-fee",
+          name: "Biaya Penjemputan",
+          price: pickupFee,
+          quantity: 1,
+        })
       }
-
-      // Add pickup and delivery fees
-      paymentPayload.item_details.push({
-        id: "pickup-fee",
-        name: "Biaya Penjemputan",
-        price: pickupFee,
-        quantity: 1,
-      })
       
-      paymentPayload.item_details.push({
-        id: "delivery-fee", 
-        name: "Biaya Pengantaran",
-        price: deliveryFee,
-        quantity: 1,
-      })
+      if (orderData.deliveryOption === 'delivery') {
+        paymentPayload.item_details.push({
+          id: "delivery-fee", 
+          name: "Biaya Pengantaran",
+          price: deliveryFee,
+          quantity: 1,
+        })
+      }
 
       const paymentResponse = await fetch('/api/payment/create', {
         method: 'POST',
@@ -549,65 +589,192 @@ export default function OrderPage() {
                         </div>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-
-                {/* Pickup Details */}
+                  </CardContent>                </Card>                {/* Pickup Options */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <MapPin className="h-5 w-5" />
-                      Detail Penjemputan
+                      Opsi Penjemputan
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div>
-                      <Label htmlFor="address">Alamat Penjemputan</Label>
-                      <Textarea
-                        id="address"
-                        placeholder="Masukkan alamat lengkap untuk penjemputan..."
-                        value={orderData.pickupAddress}
-                        onChange={(e) => setOrderData(prev => ({ ...prev, pickupAddress: e.target.value }))}
-                        className="mt-1"
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="pickup-date">Tanggal Penjemputan</Label>
-                        <Input
-                          id="pickup-date"
-                          type="date"
-                          value={orderData.pickupDate}
-                          onChange={(e) => setOrderData(prev => ({ ...prev, pickupDate: e.target.value }))}
-                          min={new Date().toISOString().split('T')[0]}
-                          className="mt-1"
-                        />
+                    <RadioGroup
+                      value={orderData.pickupOption}
+                      onValueChange={(value: 'pickup' | 'dropoff') => 
+                        setOrderData(prev => ({ 
+                          ...prev, 
+                          pickupOption: value,
+                          // Reset pickup fields if switching to dropoff
+                          pickupAddress: value === 'dropoff' ? '' : prev.pickupAddress,
+                          pickupDate: value === 'dropoff' ? '' : prev.pickupDate,
+                          pickupTime: value === 'dropoff' ? '' : prev.pickupTime
+                        }))
+                      }
+                      className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                    >
+                      <div className="flex items-center space-x-2 p-4 border rounded-lg hover:bg-gray-50">
+                        <RadioGroupItem value="pickup" id="pickup-option" />
+                        <Label htmlFor="pickup-option" className="flex-1 cursor-pointer">
+                          <div className="font-medium">Dijemput</div>
+                          <div className="text-sm text-gray-600">Kami jemput pakaian di lokasi Anda</div>
+                          <div className="text-sm font-medium text-green-600">+ Rp {pickupFee.toLocaleString()}</div>
+                        </Label>
                       </div>
-
-                      <div>
-                        <Label htmlFor="pickup-time">Waktu Penjemputan</Label>
-                        <Select
-                          value={orderData.pickupTime}
-                          onValueChange={(value) => setOrderData(prev => ({ ...prev, pickupTime: value }))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Pilih waktu..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="08:00">08:00 - 10:00</SelectItem>
-                            <SelectItem value="10:00">10:00 - 12:00</SelectItem>
-                            <SelectItem value="13:00">13:00 - 15:00</SelectItem>
-                            <SelectItem value="15:00">15:00 - 17:00</SelectItem>
-                          </SelectContent>
-                        </Select>
+                      <div className="flex items-center space-x-2 p-4 border rounded-lg hover:bg-gray-50">
+                        <RadioGroupItem value="dropoff" id="dropoff-option" />
+                        <Label htmlFor="dropoff-option" className="flex-1 cursor-pointer">
+                          <div className="font-medium">Drop Off Sendiri</div>
+                          <div className="text-sm text-gray-600">Anda antar pakaian ke toko kami</div>
+                          <div className="text-sm font-medium text-blue-600">Gratis</div>
+                        </Label>
                       </div>
-                    </div>
+                    </RadioGroup>
+
+                    {/* Pickup Address and Details Input - Only show if pickup option is selected */}
+                    {orderData.pickupOption === 'pickup' && (
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="pickup-address">Alamat Penjemputan</Label>
+                          <Textarea
+                            id="pickup-address"
+                            placeholder="Masukkan alamat lengkap untuk penjemputan..."
+                            value={orderData.pickupAddress}
+                            onChange={(e) => setOrderData(prev => ({ ...prev, pickupAddress: e.target.value }))}
+                            className="mt-1"
+                            rows={3}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Alamat ini akan digunakan untuk menjemput pakaian kotor Anda
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="pickup-date">Tanggal Penjemputan</Label>
+                            <Input
+                              id="pickup-date"
+                              type="date"
+                              value={orderData.pickupDate}
+                              onChange={(e) => setOrderData(prev => ({ ...prev, pickupDate: e.target.value }))}
+                              min={new Date().toISOString().split('T')[0]}
+                              className="mt-1"
+                            />
+                          </div>
+
+                          <div>
+                            <Label htmlFor="pickup-time">Waktu Penjemputan</Label>
+                            <Select
+                              value={orderData.pickupTime}
+                              onValueChange={(value) => setOrderData(prev => ({ ...prev, pickupTime: value }))}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Pilih waktu..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="08:00">08:00 - 10:00</SelectItem>
+                                <SelectItem value="10:00">10:00 - 12:00</SelectItem>
+                                <SelectItem value="13:00">13:00 - 15:00</SelectItem>
+                                <SelectItem value="15:00">15:00 - 17:00</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
-                {/* Contact Details */}
+                {/* Delivery Options */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Package className="h-5 w-5" />
+                      Opsi Pengantaran
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">                    <RadioGroup
+                      value={orderData.deliveryOption}
+                      onValueChange={(value: 'delivery' | 'selfpickup') => 
+                        setOrderData(prev => ({ 
+                          ...prev, 
+                          deliveryOption: value,
+                          // Reset delivery fields if switching to self pickup
+                          deliveryAddress: value === 'selfpickup' ? '' : prev.deliveryAddress,
+                          deliveryDate: value === 'selfpickup' ? '' : prev.deliveryDate,
+                          deliveryTime: value === 'selfpickup' ? '' : prev.deliveryTime
+                        }))
+                      }
+                      className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                    >
+                      <div className="flex items-center space-x-2 p-4 border rounded-lg hover:bg-gray-50">
+                        <RadioGroupItem value="delivery" id="delivery-option" />
+                        <Label htmlFor="delivery-option" className="flex-1 cursor-pointer">
+                          <div className="font-medium">Diantar</div>
+                          <div className="text-sm text-gray-600">Kami antar pakaian ke lokasi Anda</div>
+                          <div className="text-sm font-medium text-green-600">+ Rp {deliveryFee.toLocaleString()}</div>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2 p-4 border rounded-lg hover:bg-gray-50">
+                        <RadioGroupItem value="selfpickup" id="selfpickup-option" />
+                        <Label htmlFor="selfpickup-option" className="flex-1 cursor-pointer">
+                          <div className="font-medium">Ambil Sendiri</div>
+                          <div className="text-sm text-gray-600">Anda ambil pakaian di toko kami</div>
+                          <div className="text-sm font-medium text-blue-600">Gratis</div>
+                        </Label>
+                      </div>
+                    </RadioGroup>                    {/* Delivery Address and Details Input */}
+                    {orderData.deliveryOption === 'delivery' && (
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="delivery-address">Alamat Pengantaran</Label>
+                          <Textarea
+                            id="delivery-address"
+                            placeholder="Masukkan alamat lengkap untuk pengantaran..."
+                            value={orderData.deliveryAddress}
+                            onChange={(e) => setOrderData(prev => ({ ...prev, deliveryAddress: e.target.value }))}
+                            className="mt-1"
+                            rows={3}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Alamat ini akan digunakan untuk mengantarkan pakaian yang sudah selesai dicuci
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="delivery-date">Tanggal Pengantaran</Label>
+                            <Input
+                              id="delivery-date"
+                              type="date"
+                              value={orderData.deliveryDate}
+                              onChange={(e) => setOrderData(prev => ({ ...prev, deliveryDate: e.target.value }))}
+                              min={new Date().toISOString().split('T')[0]}
+                              className="mt-1"
+                            />
+                          </div>
+
+                          <div>
+                            <Label htmlFor="delivery-time">Waktu Pengantaran</Label>
+                            <Select
+                              value={orderData.deliveryTime}
+                              onValueChange={(value) => setOrderData(prev => ({ ...prev, deliveryTime: value }))}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Pilih waktu..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="08:00">08:00 - 10:00</SelectItem>
+                                <SelectItem value="10:00">10:00 - 12:00</SelectItem>
+                                <SelectItem value="13:00">13:00 - 15:00</SelectItem>
+                                <SelectItem value="15:00">15:00 - 17:00</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>                {/* Contact Details */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -691,22 +858,24 @@ export default function OrderPage() {
                       </div>
                     )}
 
-                    <Separator />
-
-                    {/* Price Breakdown */}
+                    <Separator />                    {/* Price Breakdown */}
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span>Subtotal</span>
                         <span>Rp {calculateSubtotal().toLocaleString()}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span>Biaya Penjemputan</span>
-                        <span>Rp {pickupFee.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Biaya Pengantaran</span>
-                        <span>Rp {deliveryFee.toLocaleString()}</span>
-                      </div>
+                      {orderData.pickupOption === 'pickup' && (
+                        <div className="flex justify-between">
+                          <span>Biaya Penjemputan</span>
+                          <span>Rp {pickupFee.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {orderData.deliveryOption === 'delivery' && (
+                        <div className="flex justify-between">
+                          <span>Biaya Pengantaran</span>
+                          <span>Rp {deliveryFee.toLocaleString()}</span>
+                        </div>
+                      )}
                     </div>
 
                     <Separator />
@@ -714,29 +883,72 @@ export default function OrderPage() {
                     <div className="flex justify-between font-bold text-lg">
                       <span>Total</span>
                       <span>Rp {calculateTotal().toLocaleString()}</span>
-                    </div>
-
-                    {/* Pickup Info */}
-                    {orderData.pickupDate && orderData.pickupTime && (
+                    </div>                    {/* Service Info */}
+                    {(orderData.pickupOption === 'pickup' && orderData.pickupDate && orderData.pickupTime) || 
+                     orderData.pickupOption === 'dropoff' || 
+                     (orderData.deliveryOption === 'delivery' && orderData.deliveryDate && orderData.deliveryTime) || 
+                     orderData.deliveryOption === 'selfpickup' ? (
                       <>
                         <Separator />
                         <div className="space-y-2 text-sm">
-                          <div className="flex items-center gap-2 text-gray-600">
-                            <Calendar className="h-4 w-4" />
-                            <span>{new Date(orderData.pickupDate).toLocaleDateString('id-ID', { 
-                              weekday: 'long', 
-                              year: 'numeric', 
-                              month: 'long', 
-                              day: 'numeric' 
-                            })}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-600">
-                            <Clock className="h-4 w-4" />
-                            <span>{orderData.pickupTime}</span>
-                          </div>
+                          {/* Pickup Info */}
+                          {orderData.pickupOption === 'pickup' && orderData.pickupDate && orderData.pickupTime && (
+                            <>
+                              <div className="flex items-center gap-2 text-gray-600">
+                                <Calendar className="h-4 w-4" />
+                                <span>Penjemputan: {new Date(orderData.pickupDate).toLocaleDateString('id-ID', { 
+                                  weekday: 'long', 
+                                  year: 'numeric', 
+                                  month: 'long', 
+                                  day: 'numeric' 
+                                })}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-gray-600">
+                                <Clock className="h-4 w-4" />
+                                <span>{orderData.pickupTime}</span>
+                              </div>
+                            </>
+                          )}
+                          {orderData.pickupOption === 'dropoff' && (
+                            <div className="flex items-center gap-2 text-gray-600">
+                              <MapPin className="h-4 w-4" />
+                              <span>Drop off sendiri ke toko</span>
+                            </div>
+                          )}
+                          
+                          {/* Delivery Info */}
+                          {orderData.deliveryOption === 'delivery' && orderData.deliveryDate && orderData.deliveryTime && (
+                            <>
+                              <div className="flex items-center gap-2 text-gray-600">
+                                <Package className="h-4 w-4" />
+                                <span>Pengantaran: {new Date(orderData.deliveryDate).toLocaleDateString('id-ID', { 
+                                  weekday: 'long', 
+                                  year: 'numeric', 
+                                  month: 'long', 
+                                  day: 'numeric' 
+                                })}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-gray-600">
+                                <Clock className="h-4 w-4" />
+                                <span>{orderData.deliveryTime}</span>
+                              </div>
+                            </>
+                          )}
+                          {orderData.deliveryOption === 'delivery' && (!orderData.deliveryDate || !orderData.deliveryTime) && (
+                            <div className="flex items-center gap-2 text-gray-600">
+                              <Package className="h-4 w-4" />
+                              <span>Akan diantar ke alamat Anda</span>
+                            </div>
+                          )}
+                          {orderData.deliveryOption === 'selfpickup' && (
+                            <div className="flex items-center gap-2 text-gray-600">
+                              <Package className="h-4 w-4" />
+                              <span>Ambil sendiri di toko</span>
+                            </div>
+                          )}
                         </div>
                       </>
-                    )}
+                    ) : null}
 
                     <Button
                       type="submit"
