@@ -112,15 +112,26 @@ export default function OrdersPage() {
       fetchOrders()
     }
   })
-
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, order?: Order) => {
+    const hasPickup = order?.pickup_option === 'pickup'
+    const hasDelivery = order?.delivery_option === 'delivery'
+    
     const statusConfig = {
       pending: { label: 'Menunggu', variant: 'secondary' as const },
       confirmed: { label: 'Dikonfirmasi', variant: 'default' as const },
-      picked_up: { label: 'Dijemput', variant: 'default' as const },
+      picked_up: { 
+        label: hasPickup ? 'Dijemput' : 'Diterima', 
+        variant: 'default' as const 
+      },
       in_process: { label: 'Diproses', variant: 'default' as const },
-      ready: { label: 'Siap', variant: 'default' as const },
-      delivered: { label: 'Diantar', variant: 'default' as const },
+      ready: { 
+        label: hasDelivery ? 'Siap Diantar' : 'Siap Diambil', 
+        variant: 'default' as const 
+      },
+      delivered: { 
+        label: hasDelivery ? 'Diantar' : 'Diambil', 
+        variant: 'default' as const 
+      },
       cancelled: { label: 'Dibatalkan', variant: 'destructive' as const },
     }
 
@@ -386,9 +397,8 @@ export default function OrdersPage() {
                           <p className="text-2xl font-bold text-green-600">
                             Rp {order.total_amount.toLocaleString()}
                           </p>
-                          <div className="flex gap-2 mt-2">
-                            <Badge {...getStatusBadge(order.status)}>
-                              {getStatusBadge(order.status).label}
+                          <div className="flex gap-2 mt-2">                            <Badge {...getStatusBadge(order.status, order)}>
+                              {getStatusBadge(order.status, order).label}
                             </Badge>
                             <Badge {...getPaymentStatusBadge(order.payment_status)}>
                               {getPaymentStatusBadge(order.payment_status).label}

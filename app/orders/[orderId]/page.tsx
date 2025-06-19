@@ -235,15 +235,31 @@ export default function OrderDetailPage() {  const params = useParams()
       setRefreshing(false)
     }
   }
-
   const getStatusBadge = (status: string) => {
+    if (!order) return { label: status, variant: 'secondary' as const, color: 'bg-gray-100 text-gray-800' }
+    
+    const hasPickup = order.pickup_option === 'pickup'
+    const hasDelivery = order.delivery_option === 'delivery'
+    
     const statusConfig = {
       pending: { label: 'Menunggu', variant: 'secondary' as const, color: 'bg-yellow-100 text-yellow-800' },
       confirmed: { label: 'Dikonfirmasi', variant: 'default' as const, color: 'bg-[#0F4C75] text-white' },
-      picked_up: { label: 'Dijemput', variant: 'default' as const, color: 'bg-blue-100 text-blue-800' },
+      picked_up: { 
+        label: hasPickup ? 'Dijemput' : 'Diterima', 
+        variant: 'default' as const, 
+        color: 'bg-blue-100 text-blue-800' 
+      },
       in_process: { label: 'Diproses', variant: 'default' as const, color: 'bg-orange-100 text-orange-800' },
-      ready: { label: 'Siap', variant: 'default' as const, color: 'bg-green-100 text-green-800' },
-      delivered: { label: 'Diantar', variant: 'default' as const, color: 'bg-green-500 text-white' },
+      ready: { 
+        label: hasDelivery ? 'Siap Diantar' : 'Siap Diambil', 
+        variant: 'default' as const, 
+        color: 'bg-green-100 text-green-800' 
+      },
+      delivered: { 
+        label: hasDelivery ? 'Diantar' : 'Diambil', 
+        variant: 'default' as const, 
+        color: 'bg-green-500 text-white' 
+      },
       cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
     }
 
@@ -264,16 +280,70 @@ export default function OrderDetailPage() {  const params = useParams()
     const config = statusConfig[paymentStatus as keyof typeof statusConfig] || { label: paymentStatus, variant: 'secondary' as const, color: 'bg-gray-100 text-gray-800' }
     return config
   }
-
   const getOrderSteps = () => {
-    const steps = [
+    if (!order) return []
+
+    // Dynamic steps based on pickup/delivery options
+    const hasPickup = order.pickup_option === 'pickup'
+    const hasDelivery = order.delivery_option === 'delivery'
+
+    let steps = [
       { key: 'pending', label: 'Pesanan Dibuat', icon: Package, description: 'Pesanan telah dibuat dan menunggu konfirmasi' },
-      { key: 'confirmed', label: 'Pesanan Dikonfirmasi', icon: CheckCircle, description: 'Pesanan dikonfirmasi dan siap dijemput' },
-      { key: 'picked_up', label: 'Dijemput', icon: Truck, description: 'Cucian telah dijemput dari alamat Anda' },
-      { key: 'in_process', label: 'Sedang Diproses', icon: Package, description: 'Cucian sedang dalam proses pencucian' },
-      { key: 'ready', label: 'Siap Diantar', icon: CheckCircle, description: 'Cucian sudah selesai dan siap diantar' },
-      { key: 'delivered', label: 'Selesai', icon: CheckCircle, description: 'Cucian telah diantar ke alamat Anda' }
+      { key: 'confirmed', label: 'Pesanan Dikonfirmasi', icon: CheckCircle, description: 'Pesanan dikonfirmasi dan siap diproses' },
     ]
+
+    // Add pickup step if pickup is selected
+    if (hasPickup) {
+      steps.push({ 
+        key: 'picked_up', 
+        label: 'Dijemput', 
+        icon: Truck, 
+        description: 'Cucian telah dijemput dari alamat Anda' 
+      })
+    } else {
+      steps.push({ 
+        key: 'picked_up', 
+        label: 'Diterima', 
+        icon: Package, 
+        description: 'Cucian telah diterima di tempat kami' 
+      })
+    }
+
+    steps.push({ 
+      key: 'in_process', 
+      label: 'Sedang Diproses', 
+      icon: Package, 
+      description: 'Cucian sedang dalam proses pencucian' 
+    })
+
+    // Add delivery/ready step based on delivery option
+    if (hasDelivery) {
+      steps.push({ 
+        key: 'ready', 
+        label: 'Siap Diantar', 
+        icon: CheckCircle, 
+        description: 'Cucian sudah selesai dan siap diantar' 
+      })
+      steps.push({ 
+        key: 'delivered', 
+        label: 'Diantar', 
+        icon: Truck, 
+        description: 'Cucian telah diantar ke alamat Anda' 
+      })
+    } else {
+      steps.push({ 
+        key: 'ready', 
+        label: 'Siap Diambil', 
+        icon: CheckCircle, 
+        description: 'Cucian sudah selesai dan siap diambil' 
+      })
+      steps.push({ 
+        key: 'delivered', 
+        label: 'Diambil', 
+        icon: CheckCircle, 
+        description: 'Cucian telah diambil' 
+      })
+    }
 
     const currentStatusIndex = steps.findIndex(step => step.key === order?.status)
 
@@ -513,40 +583,84 @@ export default function OrderDetailPage() {  const params = useParams()
                             <p className="font-medium">{order.customer_phone}</p>
                           </div>
                         </div>
-                      </div>
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-3">
-                          <Calendar className="h-5 w-5 text-gray-400" />
-                          <div>
-                            <p className="text-sm text-gray-600">Tanggal Penjemputan</p>
-                            <p className="font-medium">
-                              {new Date(order.pickup_date).toLocaleDateString('id-ID', {
-                                weekday: 'long',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                              })}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <Clock className="h-5 w-5 text-gray-400" />
-                          <div>
-                            <p className="text-sm text-gray-600">Waktu Penjemputan</p>
-                            <p className="font-medium">{order.pickup_time}</p>
-                          </div>
-                        </div>
+                      </div>                      <div className="space-y-4">
+                        {/* Pickup Information */}
+                        {order.pickup_option === 'pickup' && (
+                          <>
+                            <div className="flex items-center space-x-3">
+                              <Calendar className="h-5 w-5 text-green-500" />
+                              <div>
+                                <p className="text-sm text-gray-600">Tanggal Penjemputan</p>
+                                <p className="font-medium">
+                                  {new Date(order.pickup_date).toLocaleDateString('id-ID', {
+                                    weekday: 'long',
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                              <Clock className="h-5 w-5 text-green-500" />
+                              <div>
+                                <p className="text-sm text-gray-600">Waktu Penjemputan</p>
+                                <p className="font-medium">{order.pickup_time}</p>
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Delivery Information */}
+                        {order.delivery_option === 'delivery' && (
+                          <>
+                            <div className="flex items-center space-x-3">
+                              <Calendar className="h-5 w-5 text-blue-500" />
+                              <div>
+                                <p className="text-sm text-gray-600">Tanggal Pengantaran</p>
+                                <p className="font-medium">
+                                  {order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('id-ID', {
+                                    weekday: 'long',
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                  }) : 'Belum ditentukan'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                              <Clock className="h-5 w-5 text-blue-500" />
+                              <div>
+                                <p className="text-sm text-gray-600">Waktu Pengantaran</p>
+                                <p className="font-medium">{order.delivery_time || 'Belum ditentukan'}</p>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
 
+                    {/* Address Information */}
                     <div className="mt-6 pt-6 border-t">
-                      <div className="flex items-start space-x-3">
-                        <MapPin className="h-5 w-5 text-gray-400 mt-1" />
-                        <div>
-                          <p className="text-sm text-gray-600">Alamat Penjemputan</p>
-                          <p className="font-medium">{order.pickup_address}</p>
+                      {order.pickup_option === 'pickup' && (
+                        <div className="flex items-start space-x-3 mb-4">
+                          <MapPin className="h-5 w-5 text-green-500 mt-1" />
+                          <div>
+                            <p className="text-sm text-gray-600">Alamat Penjemputan</p>
+                            <p className="font-medium">{order.pickup_address}</p>
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {order.delivery_option === 'delivery' && (
+                        <div className="flex items-start space-x-3">
+                          <MapPin className="h-5 w-5 text-blue-500 mt-1" />
+                          <div>
+                            <p className="text-sm text-gray-600">Alamat Pengantaran</p>
+                            <p className="font-medium">{order.delivery_address || 'Sama dengan alamat penjemputan'}</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {order.notes && (
