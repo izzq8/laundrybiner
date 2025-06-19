@@ -10,7 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Calendar, Clock, MapPin, Phone, User, Package, Minus, Plus, Trash2 } from "lucide-react"
+import { Calendar, Clock, MapPin, Phone, User, Package, Minus, Plus, Trash2, ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 interface ServiceType {
@@ -338,18 +338,36 @@ export default function OrderPage() {
       setLoading(false)
     }
   }
-
   const kilogamServices = serviceTypes.filter(s => s.type === 'kiloan')
   const satuanServices = serviceTypes.filter(s => s.type === 'satuan')
+
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="container mx-auto px-4">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Buat Pesanan Laundry</h1>
-            <p className="text-gray-600">Isi form di bawah untuk membuat pesanan laundry Anda</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto">            <div className="flex items-center py-4">
+              <Button 
+                type="button"
+                variant="ghost" 
+                size="sm" 
+                onClick={() => router.back()}
+                className="mr-3 p-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">Buat Pesanan Laundry</h1>
+                <p className="text-sm text-gray-600">Isi form di bawah untuk membuat pesanan laundry Anda</p>
+              </div>
+            </div>
           </div>
+        </div>
+      </div>
+
+      <div className="py-6">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto">{/* ...existing form content... */}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -722,7 +740,7 @@ export default function OrderPage() {
 
                     <Button
                       type="submit"
-                      className="w-full"
+                      className="text-white w-full"
                       size="lg"
                       disabled={loading || calculateTotal() === 0}
                     >
@@ -730,13 +748,13 @@ export default function OrderPage() {
                     </Button>
 
                     <p className="text-xs text-gray-500 text-center">
-                      Dengan melanjutkan, Anda menyetujui syarat dan ketentuan kami
-                    </p>
+                      Dengan melanjutkan, Anda menyetujui syarat dan ketentuan kami                    </p>
                   </CardContent>
                 </Card>
               </div>
             </div>
           </form>
+          </div>
         </div>
       </div>
     </div>
