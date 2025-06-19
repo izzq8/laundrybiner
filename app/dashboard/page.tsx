@@ -11,11 +11,27 @@ import { useEffect } from "react"
 
 interface Order {
   id: string;
-  status_color: string;
+  order_number: string;
   status: string;
-  items: string;
+  payment_status: string;
+  total_amount: number;
   pickup_date: string;
-  total: number;
+  pickup_time: string;
+  customer_name: string;
+  customer_phone: string;
+  pickup_address: string;
+  created_at: string;
+  service_type?: string;
+  weight?: number;
+  pickup_option?: string;
+  delivery_option?: string;
+  delivery_address?: string;
+  delivery_date?: string;
+  delivery_time?: string;
+  service_types?: {
+    name: string;
+    type: string;
+  };
 }
 
 export default function DashboardPage() {
@@ -183,24 +199,21 @@ export default function DashboardPage() {
                   <div
                     key={order.id}
                     className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`w-10 h-10 ${order.status_color} rounded-lg flex items-center justify-center text-white`}
-                      >
+                  >                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
                         {getStatusIcon(order.status)}
                       </div>
                       <div>
-                        <h4 className="font-semibold text-gray-900">{order.id}</h4>
-                        <p className="text-sm text-gray-600">{order.items}</p>
-                        <p className="text-xs text-gray-500">Pickup: {order.pickup_date}</p>
+                        <h4 className="font-semibold text-gray-900">{order.order_number}</h4>
+                        <p className="text-sm text-gray-600">{order.service_types?.name || 'Layanan Laundry'}</p>
+                        <p className="text-xs text-gray-500">Pickup: {order.pickup_date ? new Date(order.pickup_date).toLocaleDateString('id-ID') : 'TBD'}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <Badge variant="secondary" className="mb-2">
                         {order.status}
                       </Badge>
-                      <p className="text-sm font-semibold text-gray-900">Rp {order.total.toLocaleString("id-ID")}</p>
+                      <p className="text-sm font-semibold text-gray-900">Rp {order.total_amount?.toLocaleString("id-ID") || '0'}</p>
                     </div>
                   </div>
                 ))}
