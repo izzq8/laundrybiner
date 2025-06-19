@@ -1,23 +1,71 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Sparkles, Plus, Package, Clock, CheckCircle, Truck, History, User, Bell } from "lucide-react"
+import { Sparkles, Plus, Package, Clock, CheckCircle, Truck, History, User, Bell, RefreshCw } from "lucide-react"
 
 interface Order {
   id: string;
-  status_color: string;
+  order_number?: string;
   status: string;
-  items: string;
-  pickup_date: string;
-  total: number;
+  status_color?: string;
+  items?: string;
+  pickup_date?: string;
+  total?: number;
+  total_amount?: number;
+  customer_name?: string;
+  created_at: string;
+  service_types?: {
+    name: string;
+    type: string;
+  };
 }
 
 export default function DashboardPage() {
-  const [orders] = useState<Order[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch recent orders (latest 3 orders)
+  const fetchRecentOrders = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const response = await fetch('/api/orders?limit=3&demo=true', {
+        method: 'GET',
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      if (data.success && data.orders) {
+        setOrders(data.orders)
+      } else {
+        console.warn('No orders found or API returned false success')
+        setOrders([])
+      }
+    } catch (error) {
+      console.error('Error fetching recent orders:', error)
+      setError(error instanceof Error ? error.message : 'Failed to fetch orders')
+      setOrders([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchRecentOrders()
+  }, [])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -121,32 +169,53 @@ export default function DashboardPage() {
                 </Button>
               </Link>
             </div>
-          </CardHeader>
-          <CardContent>
-            {orders.length > 0 ? (
+          </CardHeader>          <CardContent>
+            {loading ? (
+              <div className="text-center py-12">
+                <RefreshCw className="w-8 h-8 text-gray-300 mx-auto mb-4 animate-spin" />
+                <p className="text-gray-600">Memuat pesanan...</p>
+              </div>
+            ) : error ? (
+              <div className="text-center py-12">
+                <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Gagal memuat pesanan</h3>
+                <p className="text-gray-600 mb-4">{error}</p>
+                <Button onClick={fetchRecentOrders} variant="outline" size="sm">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Coba Lagi
+                </Button>
+              </div>
+            ) : orders.length > 0 ? (
               <div className="space-y-4">
                 {orders.map((order) => (
                   <div
                     key={order.id}
                     className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
                   >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`w-10 h-10 ${order.status_color} rounded-lg flex items-center justify-center text-white`}
+                    <div className="flex items-center gap-4">                      <div
+                        className={`w-10 h-10 ${order.status_color || 'bg-gray-500'} rounded-lg flex items-center justify-center text-white`}
                       >
                         {getStatusIcon(order.status)}
                       </div>
                       <div>
-                        <h4 className="font-semibold text-gray-900">{order.id}</h4>
-                        <p className="text-sm text-gray-600">{order.items}</p>
-                        <p className="text-xs text-gray-500">Pickup: {order.pickup_date}</p>
+                        <h4 className="font-semibold text-gray-900">
+                          {order.order_number || order.id}
+                        </h4>
+                        <p className="text-sm text-gray-600">
+                          {order.items || order.service_types?.name || 'Layanan laundry'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {order.pickup_date ? `Pickup: ${order.pickup_date}` : 
+                           order.created_at ? `Dibuat: ${new Date(order.created_at).toLocaleDateString('id-ID')}` : 
+                           'Tanggal tidak tersedia'}
+                        </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <Badge variant="secondary" className="mb-2">
+                    <div className="text-right">                      <Badge variant="secondary" className="mb-2">
                         {order.status}
-                      </Badge>
-                      <p className="text-sm font-semibold text-gray-900">Rp {order.total.toLocaleString("id-ID")}</p>
+                      </Badge>                      <p className="text-sm font-semibold text-gray-900">
+                        Rp {(order.total_amount || order.total || 0).toLocaleString("id-ID")}
+                      </p>
                     </div>
                   </div>
                 ))}

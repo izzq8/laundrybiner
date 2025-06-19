@@ -82,14 +82,17 @@ export default function OrdersPage() {
   useEffect(() => {
     fetchOrders()
   }, [])
-
   const fetchOrders = async () => {
     try {
-      const response = await fetch('/api/orders')
+      const response = await fetch('/api/orders', {
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      })
       if (response.ok) {
         const data = await response.json()
         if (data.success) {
-          setOrders(data.data || [])
+          setOrders(data.orders || data.data || [])
         } else {
           setError('Gagal memuat pesanan')
         }

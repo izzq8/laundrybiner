@@ -3,8 +3,13 @@ import { supabaseAdmin } from "@/lib/supabase"
 
 export async function GET(request: NextRequest) {
   try {
-    // Get all orders - in production you would filter by authenticated user
-    const { data: orders, error } = await supabaseAdmin
+    // Get query parameters
+    const { searchParams } = new URL(request.url)
+    const limitParam = searchParams.get('limit')
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined
+    
+    // Build query
+    let query = supabaseAdmin
       .from("orders")
       .select(`
         *,
@@ -16,6 +21,13 @@ export async function GET(request: NextRequest) {
         )
       `)
       .order("created_at", { ascending: false })
+    
+    // Apply limit if specified
+    if (limit && limit > 0) {
+      query = query.limit(limit)
+    }
+
+    const { data: orders, error } = await query
 
     if (error) {
       console.error("Error fetching orders:", error)
@@ -28,7 +40,13 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: orders || []
+      orders: orders || []
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     })
 
   } catch (error) {

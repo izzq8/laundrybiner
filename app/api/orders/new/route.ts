@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {
@@ -105,10 +100,8 @@ export async function POST(request: NextRequest) {
       midtrans_order_id: transactionId
     };
 
-    console.log('Order data to insert:', JSON.stringify(orderData, null, 2));
-
-    // Insert order
-    const { data: order, error: insertError } = await supabase
+    console.log('Order data to insert:', JSON.stringify(orderData, null, 2));    // Insert order
+    const { data: order, error: insertError } = await supabaseAdmin
       .from('orders')
       .insert([orderData])
       .select()
