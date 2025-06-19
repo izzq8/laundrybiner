@@ -9,6 +9,7 @@ import { Calendar, User, Package, Eye, ArrowLeft, CreditCard, RefreshCw } from "
 import { CountdownTimer, useCanMakePayment } from "@/components/countdown-timer"
 import { usePaymentStatusUpdates } from '@/components/auto-payment-service'
 import { useAuth } from "@/components/auth-provider"
+import { supabase } from "@/lib/supabase"
 
 interface Order {
   id: string
@@ -74,41 +75,72 @@ function OrderActionButtons({
 }
 
 export default function OrdersPage() {
-  const { user, getAuthToken } = useAuth()
   const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'active' | 'history'>('active')
+  
   useEffect(() => {
+    // Fetch orders when component mounts or when auth state changes
     fetchOrders()
+  }, [user, authLoading]) // Add dependencies to refetch when auth changes
+
+  // Also add effect to refetch when component becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Page became visible, refetch orders
+        fetchOrders()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    // Also listen for focus events (when user navigates back to tab)
+    window.addEventListener('focus', fetchOrders)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', fetchOrders)
+    }
   }, [])
+
   const fetchOrders = async () => {
     try {
-      // Get auth token
-      const headers: HeadersInit = {
-        'Cache-Control': 'no-cache'
-      }
+      setLoading(true)
       
-      try {
-        const authToken = await getAuthToken()
-        if (authToken) {
-          headers['Authorization'] = `Bearer ${authToken}`
+      let headers: any = {
+        'Content-Type': 'application/json'
+      }
+
+      // Add auth header if user is logged in
+      if (user) {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`
         }
-      } catch (authError) {
-        console.log('Could not get auth token:', authError)
       }
-      
-      const response = await fetch('/api/orders', {
-        headers
+
+      console.log('🔄 Fetching orders with headers:', headers)
+      const response = await fetch('/api/orders', { 
+        headers,
+        cache: 'no-store' // Prevent caching issues
       })
+      
       if (response.ok) {
         const data = await response.json()
+        console.log('📦 Orders data received:', data)
         if (data.success) {
-          setOrders(data.orders || data.data || [])
+          setOrders(data.data || [])
+          setError(null)
         } else {
-          setError('Gagal memuat pesanan')
+          setError(data.message || 'Gagal memuat pesanan')
         }
+      } else if (response.status === 401) {
+        setError('Sesi telah berakhir. Silakan login kembali.')
+        // Don't redirect to login in demo mode, just show error
       } else {
         setError('Gagal memuat pesanan')
       }
@@ -119,15 +151,15 @@ export default function OrdersPage() {
       setLoading(false)
     }
   }
-
   // Listen for payment status updates from background service
   usePaymentStatusUpdates((data) => {
-    console.log('📢 Payment status update received on orders page:', data)
+    console.log('📢 Payment status update received on orders page:', data);
     if (data.updated > 0) {
       // Refresh orders data when payment status changes
       fetchOrders()
     }
   })
+
   const getStatusBadge = (status: string, order?: Order) => {
     const hasPickup = order?.pickup_option === 'pickup'
     const hasDelivery = order?.delivery_option === 'delivery'
@@ -146,6 +178,10 @@ export default function OrdersPage() {
       },
       delivered: { 
         label: hasDelivery ? 'Diantar' : 'Diambil', 
+        variant: 'default' as const 
+      },
+      completed: { 
+        label: 'Selesai', 
         variant: 'default' as const 
       },
       cancelled: { label: 'Dibatalkan', variant: 'destructive' as const },
@@ -287,9 +323,8 @@ export default function OrdersPage() {
       order.payment_status === 'expired'
     ).length
   }
-
   const filteredOrders = getFilteredOrders()
-
+  // Show loading when fetching orders (not dependent on auth in demo mode)
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -323,18 +358,29 @@ export default function OrdersPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b">
         <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto">
-            {/* Header */}
-            <div className="flex items-center py-4">
+          <div className="max-w-4xl mx-auto">            {/* Header */}
+            <div className="flex items-center justify-between py-4">
+              <div className="flex items-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleBackToHome}
+                  className="mr-3 p-2"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <h1 className="text-xl font-semibold text-gray-900">Pesanan Saya</h1>
+              </div>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                onClick={handleBackToHome}
-                className="mr-3 p-2"
+                onClick={fetchOrders}
+                disabled={loading}
+                className="flex items-center gap-2"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
               </Button>
-              <h1 className="text-xl font-semibold text-gray-900">Pesanan Saya</h1>
             </div>
 
             {/* Tabs */}

@@ -1,13 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Sparkles, Plus, Package, Clock, CheckCircle, Truck, History, User, Bell, RefreshCw } from "lucide-react"
-import { useAuth } from "@/components/auth-provider"
-import { useEffect } from "react"
+import { createClient } from "@/lib/supabase"
 
 interface Order {
   id: string;
@@ -19,61 +18,9 @@ interface Order {
 }
 
 export default function DashboardPage() {
-  const { user, getAuthToken } = useAuth()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  // Fetch recent orders (latest 3 orders)
-  const fetchRecentOrders = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      
-      // Get auth token
-      const headers: HeadersInit = {
-        'Cache-Control': 'no-cache'
-      }
-      
-      try {
-        const authToken = await getAuthToken()
-        if (authToken) {
-          headers['Authorization'] = `Bearer ${authToken}`
-        }
-      } catch (authError) {
-        console.log('Could not get auth token:', authError)
-      }
-      
-      const response = await fetch('/api/orders?limit=3', {
-        method: 'GET',
-        headers
-      })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const data = await response.json()
-      
-      if (data.success && data.orders) {
-        setOrders(data.orders)
-      } else {
-        console.warn('No orders found or API returned false success')
-        setOrders([])
-      }
-    } catch (error) {
-      console.error('Error fetching recent orders:', error)
-      setError(error instanceof Error ? error.message : 'Failed to fetch orders')
-      setOrders([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchRecentOrders()
-  }, [])
-
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "Menunggu pickup":
@@ -83,11 +30,60 @@ export default function DashboardPage() {
       case "Dalam pengiriman":
         return <Truck className="w-4 h-4" />
       case "Selesai":
+      case "Completed":
         return <CheckCircle className="w-4 h-4" />
       default:
         return <Clock className="w-4 h-4" />
     }
   }
+
+  const fetchRecentOrders = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const supabase = createClient('', '')
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      let response
+      if (user) {
+        // Fetch orders for authenticated user
+        response = await fetch('/api/orders?limit=3', {
+          headers: {
+            'Cache-Control': 'no-store',
+          },
+        })
+      } else {
+        // Fallback: fetch demo orders if not authenticated
+        response = await fetch('/api/orders?demo=true&limit=3', {
+          headers: {
+            'Cache-Control': 'no-store',
+          },
+        })
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      if (data.success && Array.isArray(data.orders)) {
+        setOrders(data.orders.slice(0, 3)) // Limit to 3 recent orders for dashboard
+      } else {
+        setOrders([])
+      }
+    } catch (error) {
+      console.error('Error fetching recent orders:', error)
+      setError('Failed to load recent orders')
+      setOrders([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchRecentOrders()
+  }, [])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -124,7 +120,7 @@ export default function DashboardPage() {
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Selamat Datang!</h2>
           <p className="text-gray-600">Kelola pesanan laundry Anda dengan mudah</p>
         </div>        {/* Quick Actions */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
           <Link href="/order">
             <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 border-dashed border-[#0F4C75]/20 hover:border-[#0F4C75]/40">
               <CardContent className="p-6 text-center">
@@ -141,9 +137,10 @@ export default function DashboardPage() {
             <Card className="hover:shadow-lg transition-shadow cursor-pointer">
               <CardContent className="p-6 text-center">
                 <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <Package className="w-6 h-6 text-blue-600" />                </div>
-                <h3 className="font-semibold text-gray-900 mb-2">Pesanan Saya</h3>
-                <p className="text-sm text-gray-600">Status & riwayat pesanan</p>
+                  <Package className="w-6 h-6 text-blue-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-2">Status Order</h3>
+                <p className="text-sm text-gray-600">Lacak pesanan aktif</p>
               </CardContent>
             </Card>
           </Link>
@@ -175,9 +172,23 @@ export default function DashboardPage() {
                 </Button>
               </Link>
             </div>
-          </CardHeader>
-          <CardContent>
-            {orders.length > 0 ? (
+          </CardHeader>          <CardContent>
+            {loading ? (
+              <div className="text-center py-12">
+                <RefreshCw className="w-8 h-8 text-gray-300 mx-auto mb-4 animate-spin" />
+                <p className="text-gray-600">Memuat pesanan...</p>
+              </div>
+            ) : error ? (
+              <div className="text-center py-12">
+                <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Gagal memuat pesanan</h3>
+                <p className="text-gray-600 mb-4">{error}</p>
+                <Button onClick={fetchRecentOrders} variant="outline" size="sm">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Coba Lagi
+                </Button>
+              </div>
+            ) : orders.length > 0 ? (
               <div className="space-y-4">
                 {orders.map((order) => (
                   <div
@@ -225,10 +236,11 @@ export default function DashboardPage() {
         <div className="grid grid-cols-3 gap-1">
           <Link href="/dashboard" className="flex flex-col items-center py-3 text-[#0F4C75]">
             <Package className="w-5 h-5 mb-1" />
-            <span className="text-xs">Home</span>          </Link>
+            <span className="text-xs">Home</span>
+          </Link>
           <Link href="/orders" className="flex flex-col items-center py-3 text-gray-600">
-            <History className="w-5 h-5 mb-1" />
-            <span className="text-xs">Pesanan</span>
+            <Clock className="w-5 h-5 mb-1" />
+            <span className="text-xs">Status</span>
           </Link>
           <Link href="/profile" className="flex flex-col items-center py-3 text-gray-600">
             <User className="w-5 h-5 mb-1" />
