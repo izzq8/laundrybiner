@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 import { CheckCircle, Clock, AlertCircle, ArrowLeft } from "lucide-react"
 
 export default function PaymentFinishPage() {
@@ -11,7 +13,6 @@ export default function PaymentFinishPage() {
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'failed'>('loading')
   const [orderData, setOrderData] = useState<any>(null)
-
   useEffect(() => {
     const checkPaymentStatus = async () => {
       try {
@@ -33,10 +34,12 @@ export default function PaymentFinishPage() {
         // If we have an order ID, fetch order details
         if (orderId) {
           try {
-            const response = await fetch(`/api/payment/status/${orderId}`)
+            const response = await fetch(`/api/orders/${orderId}`)
             if (response.ok) {
               const data = await response.json()
-              setOrderData(data.order)
+              if (data.success) {
+                setOrderData(data.data)
+              }
             }
           } catch (error) {
             console.error('Error fetching order details:', error)
@@ -90,17 +93,12 @@ export default function PaymentFinishPage() {
         return 'Mohon tunggu while kami memproses pembayaran Anda...'
     }
   }
-
   const handleBackToHome = () => {
     router.push('/')
   }
 
   const handleViewOrder = () => {
-    if (orderData?.id) {
-      router.push(`/order-status/${orderData.id}`)
-    } else {
-      router.push('/dashboard')
-    }
+    router.push('/orders')
   }
 
   const handleTryAgain = () => {
@@ -141,24 +139,109 @@ export default function PaymentFinishPage() {
         <CardContent className="text-center space-y-6">
           <p className="text-gray-600">
             {getStatusMessage()}
-          </p>
-
-          {orderData && (
-            <div className="bg-gray-50 p-4 rounded-lg text-left">
-              <h3 className="font-semibold text-gray-900 mb-2">Detail Pesanan:</h3>
-              <div className="space-y-1 text-sm text-gray-600">
-                <p><span className="font-medium">Order ID:</span> {orderData.order_number}</p>
-                <p><span className="font-medium">Total:</span> Rp {orderData.total_amount?.toLocaleString()}</p>
-                <p><span className="font-medium">Status:</span> {orderData.status}</p>
+          </p>          {orderData && (
+            <div className="bg-gray-50 p-4 rounded-lg text-left space-y-4">
+              <h3 className="font-semibold text-gray-900 mb-3">Detail Pesanan:</h3>
+              
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-600">Nomor Order:</p>
+                  <p className="font-medium">{orderData.order_number}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Status:</p>
+                  <Badge variant={orderData.status === 'confirmed' ? 'default' : 'secondary'}>
+                    {orderData.status === 'confirmed' ? 'Dikonfirmasi' : 
+                     orderData.status === 'pending' ? 'Menunggu' : orderData.status}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-gray-600">Layanan:</p>
+                  <p className="font-medium">{orderData.service_types?.name || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Total Pembayaran:</p>
+                  <p className="font-medium text-lg text-green-600">
+                    Rp {orderData.total_amount?.toLocaleString() || 0}
+                  </p>
+                </div>
               </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <h4 className="font-medium text-gray-900">Alamat Penjemputan:</h4>
+                <p className="text-sm text-gray-600">{orderData.pickup_address}</p>
+                
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-600">Tanggal Penjemputan:</p>
+                    <p className="font-medium">
+                      {orderData.pickup_date ? new Date(orderData.pickup_date).toLocaleDateString('id-ID') : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Waktu Penjemputan:</p>
+                    <p className="font-medium">{orderData.pickup_time || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />              <div className="space-y-2">
+                <h4 className="font-medium text-gray-900">Kontak:</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-600">Nama:</p>
+                    <p className="font-medium">{orderData.customer_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Telepon:</p>
+                    <p className="font-medium">{orderData.customer_phone}</p>
+                  </div>
+                </div>
+              </div>
+
+              {orderData.service_types?.type === 'kiloan' && orderData.weight && (
+                <>
+                  <Separator />
+                  <div>
+                    <p className="text-gray-600">Berat Cucian:</p>
+                    <p className="font-medium">{orderData.weight} kg</p>
+                  </div>
+                </>
+              )}
+
+              {orderData.order_items && orderData.order_items.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-gray-900">Item Detail:</h4>
+                    {orderData.order_items.map((item: any, index: number) => (
+                      <div key={index} className="flex justify-between text-sm">
+                        <span>{item.item_types?.name || item.item_name} x{item.quantity}</span>
+                        <span>Rp {item.total_price?.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {orderData.notes && (
+                <>
+                  <Separator />
+                  <div>
+                    <p className="text-gray-600">Catatan:</p>
+                    <p className="text-sm text-gray-700">{orderData.notes}</p>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
-          <div className="space-y-3">
-            {status === 'success' && (
+          <div className="space-y-3">            {status === 'success' && (
               <>
                 <Button onClick={handleViewOrder} className="w-full">
-                  Lihat Status Pesanan
+                  Lihat Semua Pesanan
                 </Button>
                 <Button variant="outline" onClick={handleBackToHome} className="w-full">
                   <ArrowLeft className="h-4 w-4 mr-2" />
@@ -170,7 +253,7 @@ export default function PaymentFinishPage() {
             {status === 'pending' && (
               <>
                 <Button onClick={handleViewOrder} className="w-full">
-                  Lihat Status Pesanan
+                  Lihat Semua Pesanan
                 </Button>
                 <Button variant="outline" onClick={handleBackToHome} className="w-full">
                   <ArrowLeft className="h-4 w-4 mr-2" />
