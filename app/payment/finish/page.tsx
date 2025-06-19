@@ -13,6 +13,49 @@ export default function PaymentFinishPage() {
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'failed'>('loading')
   const [orderData, setOrderData] = useState<any>(null)
+  const [orderCreated, setOrderCreated] = useState(false)
+  const [error, setError] = useState('')
+
+  const createOrderAfterPayment = async () => {
+    try {
+      // Get pending order data from sessionStorage
+      const pendingOrderData = sessionStorage.getItem('pendingOrder')
+      
+      if (!pendingOrderData) {
+        throw new Error('No pending order data found')
+      }
+
+      const orderData = JSON.parse(pendingOrderData)
+
+      // Create order in database
+      const response = await fetch('/api/orders/create-after-payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...orderData,
+          paymentStatus: 'paid'
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setOrderCreated(true)
+        setOrderData(result.order)
+        // Clear pending order data
+        sessionStorage.removeItem('pendingOrder')
+      } else {
+        throw new Error(result.message || 'Failed to create order')
+      }
+
+    } catch (error) {
+      console.error('Error creating order after payment:', error)
+      setError(error instanceof Error ? error.message : 'Failed to create order')
+    }
+  }
+
   useEffect(() => {
     const checkPaymentStatus = async () => {
       try {
@@ -25,25 +68,14 @@ export default function PaymentFinishPage() {
 
         if (transactionStatus === 'settlement' || transactionStatus === 'capture') {
           setStatus('success')
+          // Create order after successful payment
+          await createOrderAfterPayment()
         } else if (transactionStatus === 'pending') {
           setStatus('pending')
         } else {
           setStatus('failed')
-        }
-
-        // If we have an order ID, fetch order details
-        if (orderId) {
-          try {
-            const response = await fetch(`/api/orders/${orderId}`)
-            if (response.ok) {
-              const data = await response.json()
-              if (data.success) {
-                setOrderData(data.data)
-              }
-            }
-          } catch (error) {
-            console.error('Error fetching order details:', error)
-          }
+          // Clear pending order data on failed payment
+          sessionStorage.removeItem('pendingOrder')
         }
 
       } catch (error) {
@@ -67,11 +99,20 @@ export default function PaymentFinishPage() {
         return <Clock className="h-16 w-16 text-gray-500 animate-spin" />
     }
   }
-
   const getStatusTitle = () => {
-    switch (status) {
-      case 'success':
+    if (status === 'loading') {
+      return 'Memproses Pembayaran...'
+    }
+    if (status === 'success') {
+      if (orderCreated) {
         return 'Pembayaran Berhasil!'
+      } else if (error) {
+        return 'Pembayaran Berhasil, Pesanan Gagal Dibuat'
+      } else {
+        return 'Membuat Pesanan...'
+      }
+    }
+    switch (status) {
       case 'pending':
         return 'Pembayaran Sedang Diproses'
       case 'failed':
@@ -82,15 +123,25 @@ export default function PaymentFinishPage() {
   }
 
   const getStatusMessage = () => {
+    if (status === 'loading') {
+      return 'Mohon tunggu saat kami memproses pembayaran Anda...'
+    }
+    if (status === 'success') {
+      if (orderCreated) {
+        return 'Terima kasih! Pembayaran Anda telah berhasil dan pesanan laundry Anda telah dibuat. Kami akan segera memproses pesanan Anda.'
+      } else if (error) {
+        return `Pembayaran berhasil tetapi terjadi kesalahan saat membuat pesanan: ${error}. Silakan hubungi customer service.`
+      } else {
+        return 'Pembayaran berhasil! Sedang membuat pesanan Anda...'
+      }
+    }
     switch (status) {
-      case 'success':
-        return 'Terima kasih! Pembayaran Anda telah berhasil diproses. Pesanan laundry Anda akan segera diproses.'
       case 'pending':
         return 'Pembayaran Anda sedang diproses. Kami akan memberitahu Anda setelah pembayaran dikonfirmasi.'
       case 'failed':
         return 'Maaf, pembayaran Anda gagal diproses. Silakan coba lagi atau hubungi customer service.'
       default:
-        return 'Mohon tunggu while kami memproses pembayaran Anda...'
+        return 'Mohon tunggu saat kami memproses pembayaran Anda...'
     }
   }
   const handleBackToHome = () => {
@@ -236,9 +287,8 @@ export default function PaymentFinishPage() {
                 </>
               )}
             </div>
-          )}
-
-          <div className="space-y-3">            {status === 'success' && (
+          )}          <div className="space-y-3">
+            {status === 'success' && orderCreated && (
               <>
                 <Button onClick={handleViewOrder} className="w-full">
                   Lihat Semua Pesanan
@@ -250,11 +300,29 @@ export default function PaymentFinishPage() {
               </>
             )}
 
+            {status === 'success' && !orderCreated && !error && (
+              <>
+                <Button disabled className="w-full">
+                  Membuat Pesanan...
+                </Button>
+                <Button variant="outline" onClick={handleBackToHome} className="w-full">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Kembali ke Beranda
+                </Button>
+              </>
+            )}
+
+            {status === 'success' && error && (
+              <>
+                <Button variant="outline" onClick={handleBackToHome} className="w-full">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Kembali ke Beranda
+                </Button>
+              </>
+            )}
+
             {status === 'pending' && (
               <>
-                <Button onClick={handleViewOrder} className="w-full">
-                  Lihat Semua Pesanan
-                </Button>
                 <Button variant="outline" onClick={handleBackToHome} className="w-full">
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Kembali ke Beranda

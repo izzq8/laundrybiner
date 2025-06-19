@@ -56,9 +56,10 @@ interface OrderFormData {
 
 export default function OrderPage() {
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])
   const [itemTypes, setItemTypes] = useState<ItemType[]>([])
+  const [loading, setLoading] = useState(false)
+  const [snapLoaded, setSnapLoaded] = useState(false)
   const [orderData, setOrderData] = useState<OrderFormData>({
     serviceType: 'kiloan',
     serviceTypeId: '',
@@ -80,6 +81,21 @@ export default function OrderPage() {
   const pickupFee = 5000
   const deliveryFee = 5000
   
+  // Load Midtrans Snap script
+  useEffect(() => {
+    if (!document.getElementById("midtrans-snap")) {
+      const script = document.createElement("script")
+      script.src = "https://app.sandbox.midtrans.com/snap/snap.js"
+      script.id = "midtrans-snap"
+      script.setAttribute("data-client-key", process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY || "SB-Mid-client-mNdxM5MY-ItvKEFT")
+      script.onload = () => setSnapLoaded(true)
+      script.onerror = () => console.error("Failed to load Midtrans Snap script")
+      document.body.appendChild(script)
+    } else {
+      setSnapLoaded(true)
+    }
+  }, [])
+
   useEffect(() => {
     fetchServiceTypes()
     fetchItemTypes()
@@ -235,8 +251,7 @@ export default function OrderPage() {
     }
     if (orderData.deliveryOption === 'delivery' && !orderData.deliveryAddress.trim()) {
       return 'Masukkan alamat pengantaran'
-    }
-    if (orderData.pickupOption === 'pickup' && !orderData.pickupDate) return 'Pilih tanggal penjemputan'
+    }    if (orderData.pickupOption === 'pickup' && !orderData.pickupDate) return 'Pilih tanggal penjemputan'
     if (orderData.pickupOption === 'pickup' && !orderData.pickupTime) return 'Pilih waktu penjemputan'
     if (orderData.deliveryOption === 'delivery' && !orderData.deliveryDate) return 'Pilih tanggal pengantaran'
     if (orderData.deliveryOption === 'delivery' && !orderData.deliveryTime) return 'Pilih waktu pengantaran'
@@ -245,7 +260,7 @@ export default function OrderPage() {
     
     return null
   }
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -253,11 +268,21 @@ export default function OrderPage() {
     if (validationError) {
       alert(validationError)
       return
-    }    setLoading(true)
+    }
+
+    // Check if Snap is loaded
+    if (!snapLoaded || !window.snap) {
+      alert("Sistem pembayaran sedang dimuat. Silakan tunggu sebentar dan coba lagi.")
+      return
+    }
+
+    setLoading(true)
 
     try {
-      // Generate Midtrans order ID first
-      const midtransOrderId = `LAUNDRY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`      // Create order
+      // Generate Midtrans order ID
+      const midtransOrderId = `LAUNDRY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+      // Store order data in sessionStorage to be used after payment success
       const orderPayload = {
         serviceType: orderData.serviceType,
         serviceTypeId: orderData.serviceTypeId,
@@ -274,46 +299,51 @@ export default function OrderPage() {
         contactName: orderData.contactName,
         contactPhone: orderData.contactPhone,
         notes: orderData.notes,
-        transactionId: midtransOrderId
+        transactionId: midtransOrderId,
+        totalAmount: calculateTotal()
       }
 
-      const createResponse = await fetch('/api/orders/new', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(orderPayload),
-      })
-
-      const createResult = await createResponse.json()
-      
-      if (!createResult.success) {
-        throw new Error(createResult.message || 'Gagal membuat pesanan')
-      }
-
-      // Create payment
+      // Store order data temporarily in sessionStorage (no database insert yet)
+      sessionStorage.setItem('pendingOrder', JSON.stringify(orderPayload))      // Create payment token only (no database insert yet)
       const paymentPayload = {
         order_id: midtransOrderId,
         amount: calculateTotal(),
         customer_details: {
-          first_name: orderData.contactName,
-          email: "customer@laundry.com", // In real app, get from auth
-          phone: orderData.contactPhone,
+          first_name: orderData.contactName.split(' ')[0] || "Customer",
+          last_name: orderData.contactName.split(' ').slice(1).join(' ') || "",
+          email: "customer@laundry.com",
+          phone: orderData.contactPhone.startsWith('0') ? orderData.contactPhone : `0${orderData.contactPhone}`,
+          billing_address: {
+            address: orderData.pickupAddress || orderData.deliveryAddress || "Jakarta",
+            city: "Jakarta",
+            postal_code: "12345",
+            country_code: "IDN"
+          }
         },
-        item_details: orderData.serviceType === 'kiloan' 
-          ? [{
-              id: "laundry-kiloan",
-              name: serviceTypes.find(s => s.id === orderData.serviceTypeId)?.name || "Laundry Kiloan",
-              price: calculateSubtotal(),
-              quantity: 1,
-            }]
-          : orderData.items.map((item, index) => ({
-              id: `item-${index}`,
-              name: item.itemName,
-              price: item.pricePerItem,
-              quantity: item.quantity,
-            }))
-      }      // Add pickup and delivery fees based on customer selection
+        item_details: [] as Array<{
+          id: string;
+          name: string;
+          price: number;
+          quantity: number;
+        }>
+      }
+
+      // Add items to payment payload
+      if (orderData.serviceType === 'kiloan') {
+        paymentPayload.item_details.push({
+          id: "laundry-kiloan",
+          name: serviceTypes.find(s => s.id === orderData.serviceTypeId)?.name || "Laundry Kiloan",
+          price: calculateSubtotal(),
+          quantity: 1,
+        })
+      } else {
+        paymentPayload.item_details.push(...orderData.items.map((item, index) => ({
+          id: `item-${index}`,
+          name: item.itemName,
+          price: item.pricePerItem,
+          quantity: item.quantity,
+        })))
+      }// Add pickup and delivery fees based on customer selection
       if (orderData.pickupOption === 'pickup') {
         paymentPayload.item_details.push({
           id: "pickup-fee",
@@ -330,9 +360,7 @@ export default function OrderPage() {
           price: deliveryFee,
           quantity: 1,
         })
-      }
-
-      const paymentResponse = await fetch('/api/payment/create', {
+      }      const paymentResponse = await fetch('/api/payment/create-qris', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -343,27 +371,65 @@ export default function OrderPage() {
       const paymentResult = await paymentResponse.json()
       
       if (!paymentResult.success) {
-        throw new Error(paymentResult.message || 'Gagal membuat pembayaran')
-      }      // Open Midtrans Snap
-      if (window.snap) {
-        window.snap.pay(paymentResult.token, {
+        console.error('QRIS payment failed, trying original endpoint:', paymentResult)
+        
+        // Fallback to original endpoint if QRIS-optimized fails
+        const fallbackResponse = await fetch('/api/payment/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(paymentPayload),
+        })
+        
+        const fallbackResult = await fallbackResponse.json()
+        
+        if (!fallbackResult.success) {
+          throw new Error(fallbackResult.message || 'Gagal membuat pembayaran')
+        }
+        
+        // Use fallback result
+        window.snap.pay(fallbackResult.token, {
           onSuccess: function(result: any) {
             console.log('Payment success:', result)
-            // Redirect to finish page with order details
             router.push(`/payment/finish?order_id=${midtransOrderId}&transaction_status=settlement&status_code=200`)
           },
           onPending: function(result: any) {
             console.log('Payment pending:', result)
-            // Redirect to finish page with pending status
             router.push(`/payment/finish?order_id=${midtransOrderId}&transaction_status=pending&status_code=201`)
           },
           onError: function(result: any) {
             console.error('Payment error:', result)
-            // Redirect to error page with error details
+            sessionStorage.removeItem('pendingOrder')
             router.push(`/payment/error?message=${encodeURIComponent(result.status_message || 'Terjadi kesalahan dalam pembayaran')}`)
           },
           onClose: function() {
-            // Payment popup closed by user - redirect to unfinish page
+            sessionStorage.removeItem('pendingOrder')
+            router.push('/payment/unfinish')          }
+        })
+        return // Exit after fallback
+      }
+
+      // Open Midtrans Snap with QRIS-optimized result
+      if (window.snap) {
+        window.snap.pay(paymentResult.token, {
+          onSuccess: function(result: any) {
+            console.log('QRIS Payment success:', result)
+            // Redirect to finish page - order will be created by payment notification
+            router.push(`/payment/finish?order_id=${midtransOrderId}&transaction_status=settlement&status_code=200`)
+          },
+          onPending: function(result: any) {
+            console.log('QRIS Payment pending:', result)
+            router.push(`/payment/finish?order_id=${midtransOrderId}&transaction_status=pending&status_code=201`)
+          },
+          onError: function(result: any) {
+            console.error('QRIS Payment error:', result)
+            // Clear pending order data on error
+            sessionStorage.removeItem('pendingOrder')
+            router.push(`/payment/error?message=${encodeURIComponent(result.status_message || 'Terjadi kesalahan dalam pembayaran')}`)
+          },          onClose: function() {
+            // Clear pending order data when user closes payment
+            sessionStorage.removeItem('pendingOrder')
             router.push('/payment/unfinish')
           }
         })
@@ -948,15 +1014,15 @@ export default function OrderPage() {
                           )}
                         </div>
                       </>
-                    ) : null}
-
-                    <Button
+                    ) : null}                    <Button
                       type="submit"
                       className="text-white w-full"
                       size="lg"
-                      disabled={loading || calculateTotal() === 0}
+                      disabled={loading || calculateTotal() === 0 || !snapLoaded}
                     >
-                      {loading ? 'Memproses...' : `Bayar Rp ${calculateTotal().toLocaleString()}`}
+                      {!snapLoaded ? 'Memuat sistem pembayaran...' : 
+                       loading ? 'Memproses...' : 
+                       `Bayar Rp ${calculateTotal().toLocaleString()}`}
                     </Button>
 
                     <p className="text-xs text-gray-500 text-center">

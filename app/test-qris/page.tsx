@@ -11,8 +11,30 @@ export default function TestQRISPage() {
   const [error, setError] = useState("")
   const [qrisResult, setQrisResult] = useState<any>(null)
   const [snapLoaded, setSnapLoaded] = useState(false)
+  const [configTest, setConfigTest] = useState<any>(null)
 
-  // Load Snap JS SDK
+  const testQRISConfig = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/test-qris', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      const data = await response.json()
+      setConfigTest(data)
+      
+    } catch (error) {
+      setConfigTest({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }  // Load Snap JS SDK
   useEffect(() => {
     if (!document.getElementById("midtrans-snap")) {
       const script = document.createElement("script")
@@ -26,6 +48,7 @@ export default function TestQRISPage() {
       setSnapLoaded(true)
     }
   }, [])
+
   const testQRISPayment = async () => {
     if (!snapLoaded || !window.snap) {
       setError("Midtrans Snap belum dimuat. Silakan refresh halaman.")
@@ -40,27 +63,22 @@ export default function TestQRISPage() {
         order_id: `QRIS-TEST-${Date.now()}`,
         amount: 25000,
         customer_details: {
-          first_name: "QRIS Test",
+          first_name: "QRIS Test User",
           phone: "08123456789",
           email: "test@qris.com",
-          billing_address: {
-            address: "Jakarta",
-            city: "Jakarta",
-            postal_code: "12345",
-            country_code: "IDN",
-          },
         },
         item_details: [
           {
             id: "qris-test-item",
             price: 25000,
             quantity: 1,
-            name: "Test QRIS Payment",
+            name: "Test QRIS Payment Item",
           },
         ],
       }
 
-      const response = await fetch("/api/payment/create", {
+      // Try QRIS-optimized endpoint first
+      const response = await fetch("/api/payment/create-qris", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(testOrder),
@@ -72,32 +90,113 @@ export default function TestQRISPage() {
       if (result.success && result.token) {
         setQrisResult(result)
         
-        // Open Snap with focus on QRIS
+        // Open Snap with QRIS focus
         if (window.snap) {
           window.snap.pay(result.token, {
             onSuccess: function(result: any) {
               console.log("QRIS Payment success:", result)
-              alert("Pembayaran QRIS berhasil!")
+              alert("✅ Pembayaran QRIS berhasil!")
+              setError("")
             },
             onPending: function(result: any) {
               console.log("QRIS Payment pending:", result)
-              alert("Pembayaran QRIS pending, silakan cek status transaksi")
+              alert("⏳ Pembayaran QRIS pending, silakan cek status transaksi")
             },
             onError: function(result: any) {
               console.log("QRIS Payment error:", result)
-              setError("QRIS Payment gagal: " + JSON.stringify(result))
-            },
-            onClose: function() {
+              setError("❌ QRIS Payment gagal: " + JSON.stringify(result))
+            },            onClose: function() {
               console.log("QRIS Payment popup closed")
-            },
+            }
           })
         }
       } else {
-        setError(result.message || "Gagal membuat QRIS payment")
+        console.error("Payment creation failed:", result)
+        setError(result.message || "Gagal membuat QRIS payment: " + JSON.stringify(result.error_details || result))
       }
     } catch (err) {
       console.error("QRIS Test Error:", err)
       setError("Error testing QRIS: " + (err instanceof Error ? err.message : "Unknown error"))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const testOriginalPayment = async () => {
+    if (!snapLoaded || !window.snap) {
+      setError("Midtrans Snap belum dimuat. Silakan refresh halaman.")
+      return
+    }
+
+    setLoading(true)
+    setError("")
+    
+    try {
+      const testOrder = {
+        order_id: `ORIG-TEST-${Date.now()}`,
+        amount: 25000,
+        customer_details: {
+          first_name: "Original Test User",
+          phone: "08123456789",
+          email: "test@original.com",
+          billing_address: {
+            address: "Jakarta",
+            city: "Jakarta",
+            postal_code: "12345",
+            country_code: "IDN",
+          },
+        },
+        item_details: [
+          {
+            id: "orig-test-item",
+            price: 25000,
+            quantity: 1,
+            name: "Test Original Payment Item",
+          },
+        ],
+      }
+
+      // Use original endpoint
+      const response = await fetch("/api/payment/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(testOrder),
+      })
+
+      const result = await response.json()
+      console.log("Original Test Response:", result)
+
+      if (result.success && result.token) {
+        setQrisResult(result)
+        
+        // Open Snap
+        if (window.snap) {
+          window.snap.pay(result.token, {
+            onSuccess: function(result: any) {
+              console.log("Original Payment success:", result)
+              alert("✅ Pembayaran berhasil!")
+              setError("")
+            },
+            onPending: function(result: any) {
+              console.log("Original Payment pending:", result)
+              alert("⏳ Pembayaran pending, silakan cek status transaksi")
+            },
+            onError: function(result: any) {
+              console.log("Original Payment error:", result)
+              setError("❌ Payment gagal: " + JSON.stringify(result))
+            },
+            onClose: function() {
+              console.log("Original Payment popup closed")
+            }
+          })
+        }
+      } else {
+        console.error("Payment creation failed:", result)
+        setError(result.message || "Gagal membuat payment: " + JSON.stringify(result.error_details || result))
+      }
+    } catch (err) {
+      console.error("Original Test Error:", err)
+      setError("Error testing payment: " + (err instanceof Error ? err.message : "Unknown error"))
     } finally {
       setLoading(false)
     }
@@ -157,16 +256,25 @@ export default function TestQRISPage() {
                   </div>
                 </CardContent>
               </Card>
-            )}
-
-            {/* Test Button */}
-            <Button
-              onClick={testQRISPayment}
-              className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90"
-              disabled={loading}
-            >
-              {loading ? "Testing QRIS..." : "Test QRIS Payment"}
-            </Button>
+            )}            {/* Test Buttons */}
+            <div className="space-y-3">
+              <Button
+                onClick={testQRISPayment}
+                className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90"
+                disabled={loading}
+              >
+                {loading ? "Testing QRIS..." : "Test QRIS Payment (Optimized)"}
+              </Button>
+              
+              <Button
+                onClick={testOriginalPayment}
+                variant="outline"
+                className="w-full"
+                disabled={loading}
+              >
+                {loading ? "Testing..." : "Test Original Payment API"}
+              </Button>
+            </div>
 
             {/* Simulator Links */}
             <div className="space-y-2">

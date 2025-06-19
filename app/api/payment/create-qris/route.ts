@@ -35,75 +35,35 @@ export async function POST(request: NextRequest) {
         }))
       : []
 
-    console.log("Creating payment Snap")
+    console.log("Creating QRIS-optimized payment Snap")
     console.log("Order ID:", order_id)
     console.log("Amount:", amount)
-    console.log("Safe item_details:", JSON.stringify(safeItemDetails, null, 2))    // Prepare the correct payload format for Midtrans Snap
+
+    // Simplified payload specifically optimized for QRIS
     const payload = {
       transaction_details: {
         order_id: String(order_id),
         gross_amount: Number(amount),
       },
       customer_details: {
-        first_name: customer_details.first_name || "Customer",
-        last_name: customer_details.last_name || "",
-        email: customer_details.email || "customer@example.com",
-        phone: customer_details.phone || "08123456789",
-        billing_address: {
-          first_name: customer_details.first_name || "Customer",
-          last_name: customer_details.last_name || "",
-          address: customer_details.billing_address?.address || "Jakarta",
-          city: customer_details.billing_address?.city || "Jakarta",
-          postal_code: customer_details.billing_address?.postal_code || "12345",
-          country_code: "IDN",
-        },
+        first_name: customer_details?.first_name || "Customer",
+        email: customer_details?.email || "customer@example.com",
+        phone: customer_details?.phone || "08123456789",
       },
       item_details: safeItemDetails,
-      // QRIS-optimized payment configuration - removing QRIS from enabled_payments to use default
-      enabled_payments: [
-        "gopay", 
-        "shopeepay", 
-        "dana", 
-        "linkaja", 
-        "ovo",
-        "qris", // QRIS moved to last position for better compatibility
-        "credit_card", 
-        "bca_va", 
-        "bni_va", 
-        "bri_va", 
-        "echannel", 
-        "permata_va",
-        "other_va"
-      ],
-      // Remove QRIS specific config that might cause parsing issues
-      // Let Midtrans handle QRIS configuration automatically
-      
-      // Custom expiry settings
+      // Only enable QRIS and essential e-wallets to avoid conflicts
+      enabled_payments: ["qris", "gopay", "shopeepay"],
+      // Custom expiry
       custom_expiry: {
-        expiry_duration: 60,
+        expiry_duration: 30,
         unit: "minute"
-      },
-      // Credit card configuration
-      credit_card: {
-        secure: true,
-        installment: {
-          required: false
-        }
-      },
-      // Callbacks untuk redirect URLs
-      callbacks: {
-        finish: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/payment/finish`,
-        unfinish: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/payment/unfinish`,
-        error: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/payment/error`
       }
     }
 
-    console.log("Sending payload to Midtrans (Snap):", JSON.stringify(payload, null, 2))
+    console.log("QRIS-optimized payload:", JSON.stringify(payload, null, 2))
 
-    // Use the correct Midtrans Snap endpoint
     const endpoint = `${MIDTRANS_BASE_URL}/transactions`
-    console.log("Endpoint:", endpoint)
-
+    
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -116,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     const result = await response.json()
     console.log("Midtrans response status:", response.status)
-    console.log("Midtrans response (full):", JSON.stringify(result, null, 2))
+    console.log("Midtrans response:", JSON.stringify(result, null, 2))
 
     if (response.ok && result.token) {
       return NextResponse.json({
@@ -127,7 +87,7 @@ export async function POST(request: NextRequest) {
         raw_response: result,
       })
     } else {
-      console.error("Midtrans error (no token):", result)
+      console.error("Midtrans error:", result)
       return NextResponse.json({
         success: false,
         message: result.status_message || result.error_messages || "Payment creation failed",
@@ -135,7 +95,7 @@ export async function POST(request: NextRequest) {
       })
     }
   } catch (error) {
-    console.error("Payment creation error:", error)
+    console.error("QRIS Payment creation error:", error)
     return NextResponse.json({
       success: false,
       message: "Internal server error: " + (error instanceof Error ? error.message : "Unknown error"),
