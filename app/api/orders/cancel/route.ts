@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
         { success: false, message: 'Order ID is required' },
         { status: 400 }
       )
-    }
+    }    console.log('Cancel order request:', { orderId, reason })
 
     // Get the current order
     const { data: order, error: fetchError } = await supabase
@@ -24,7 +24,17 @@ export async function POST(request: NextRequest) {
       .eq('id', orderId)
       .single()
 
-    if (fetchError || !order) {
+    console.log('Fetch order result:', { order: order?.id, error: fetchError })
+
+    if (fetchError) {
+      console.error('Error fetching order:', fetchError)
+      return NextResponse.json(
+        { success: false, message: 'Order not found', error: fetchError.message },
+        { status: 404 }
+      )
+    }
+
+    if (!order) {
       return NextResponse.json(
         { success: false, message: 'Order not found' },
         { status: 404 }
@@ -41,25 +51,34 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       )
+    }    // Update order status to indicate user wants to cancel
+    const updateData = {
+      status: 'pending_cancellation',
+      notes: order.notes 
+        ? `${order.notes}\n\n[CANCEL REQUEST] ${reason || 'User requested cancellation'}`
+        : `[CANCEL REQUEST] ${reason || 'User requested cancellation'}`,
+      updated_at: new Date().toISOString()
     }
 
-    // Update order status to indicate user wants to cancel
-    // We'll add a new field to track cancellation request
-    const { error: updateError } = await supabase
+    console.log('Updating order with data:', updateData)
+
+    const { data: updatedOrder, error: updateError } = await supabase
       .from('orders')
-      .update({
-        status: 'pending_cancellation',
-        notes: order.notes 
-          ? `${order.notes}\n\n[CANCEL REQUEST] ${reason || 'User requested cancellation'}`
-          : `[CANCEL REQUEST] ${reason || 'User requested cancellation'}`,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', orderId)
+      .select()
+
+    console.log('Update result:', { updatedOrder, updateError })
 
     if (updateError) {
       console.error('Error updating order:', updateError)
       return NextResponse.json(
-        { success: false, message: 'Failed to update order status' },
+        { 
+          success: false, 
+          message: 'Failed to update order status',
+          error: updateError.message,
+          details: updateError
+        },
         { status: 500 }
       )
     }
