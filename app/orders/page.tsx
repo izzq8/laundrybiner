@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, User, Package, Eye, ArrowLeft } from "lucide-react"
+import { AlertDialog } from "@/components/ui/alert-dialog"
+import { Calendar, User, Package, Eye, ArrowLeft, CreditCard, RefreshCw } from "lucide-react"
+import { CountdownTimer, useCanMakePayment } from "@/components/countdown-timer"
+import { usePaymentStatusUpdates } from '@/components/auto-payment-service'
+import { useAuth } from "@/components/auth-provider"
+import { useAlert } from '@/hooks/useAlert'
 
 interface Order {
   id: string
@@ -19,30 +24,93 @@ interface Order {
   customer_phone: string
   pickup_address: string
   created_at: string
+  service_type?: string
+  weight?: number
+  pickup_option?: string
+  delivery_option?: string
+  delivery_address?: string
+  delivery_date?: string
+  delivery_time?: string
   service_types?: {
     name: string
     type: string
   }
 }
 
+// Action buttons component for order cards
+function OrderActionButtons({ 
+  order, 
+  onPayment, 
+  onViewDetail 
+}: { 
+  order: Order; 
+  onPayment: (orderId: string) => void; 
+  onViewDetail: (orderId: string) => void; 
+}) {
+  const canPay = useCanMakePayment(order.created_at, order.payment_status, order.status)
+
+  return (
+    <div className="flex gap-2">
+      {/* Payment Button - Show only if payment can be made */}
+      {canPay && (
+        <Button
+          size="sm"
+          onClick={() => onPayment(order.id)}
+          className="bg-green-600 hover:bg-green-700 text-white"
+        >
+          <CreditCard className="h-4 w-4 mr-1" />
+          Bayar
+        </Button>
+      )}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onViewDetail(order.id)}
+        className="flex items-center gap-2"
+      >
+        <Eye className="h-4 w-4" />
+        Detail
+      </Button>
+    </div>
+  )
+}
+
 export default function OrdersPage() {
+  const { user, getAuthToken } = useAuth()
   const router = useRouter()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'active' | 'history'>('active')
-
+  
+  // Alert hook
+  const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
   useEffect(() => {
     fetchOrders()
   }, [])
-
   const fetchOrders = async () => {
     try {
-      const response = await fetch('/api/orders')
+      // Get auth token
+      const headers: HeadersInit = {
+        'Cache-Control': 'no-cache'
+      }
+      
+      try {
+        const authToken = await getAuthToken()
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`
+        }
+      } catch (authError) {
+        console.log('Could not get auth token:', authError)
+      }
+      
+      const response = await fetch('/api/orders', {
+        headers
+      })
       if (response.ok) {
         const data = await response.json()
         if (data.success) {
-          setOrders(data.data || [])
+          setOrders(data.orders || data.data || [])
         } else {
           setError('Gagal memuat pesanan')
         }
@@ -56,53 +124,155 @@ export default function OrdersPage() {
       setLoading(false)
     }
   }
-  const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      pending: { label: 'Menunggu', variant: 'secondary' as const, className: 'bg-yellow-100 text-yellow-800' },
-      confirmed: { label: 'Dikonfirmasi', variant: 'default' as const, className: 'bg-[#0F4C75] text-white' },
-      picked_up: { label: 'Dijemput', variant: 'default' as const, className: 'bg-blue-100 text-blue-800' },
-      in_process: { label: 'Diproses', variant: 'default' as const, className: 'bg-orange-100 text-orange-800' },
-      ready: { label: 'Siap', variant: 'default' as const, className: 'bg-green-100 text-green-800' },
-      delivered: { label: 'Diantar', variant: 'default' as const, className: 'bg-green-500 text-white' },
-      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, className: 'bg-red-100 text-red-800' },
+  // Listen for payment status updates from background service
+  usePaymentStatusUpdates((data) => {
+    console.log('📢 Payment status update received on orders page:', data)
+    if (data.updated > 0) {
+      // Refresh orders data when payment status changes
+      fetchOrders()
     }
+  })
+  
+  const getStatusBadge = (status: string, order?: Order) => {
+    const hasPickup = order?.pickup_option === 'pickup'
+    const hasDelivery = order?.delivery_option === 'delivery'
     
-    return statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'secondary' as const, className: 'bg-gray-100 text-gray-800' }
+    const statusConfig = {
+      pending: { label: 'Menunggu', variant: 'secondary' as const, color: 'bg-yellow-100 text-yellow-800' },
+      confirmed: { label: 'Dikonfirmasi', variant: 'default' as const, color: 'bg-[#0F4C75] text-white' },
+      picked_up: { 
+        label: hasPickup ? 'Dijemput' : 'Diterima', 
+        variant: 'default' as const, 
+        color: 'bg-blue-100 text-blue-800' 
+      },
+      in_process: { label: 'Diproses', variant: 'default' as const, color: 'bg-orange-100 text-orange-800' },
+      ready: { 
+        label: hasDelivery ? 'Siap Diantar' : 'Siap Diambil', 
+        variant: 'default' as const, 
+        color: 'bg-green-100 text-green-800' 
+      },
+      delivered: { 
+        label: hasDelivery ? 'Diantar' : 'Diambil', 
+        variant: 'default' as const, 
+        color: 'bg-green-500 text-white' 
+      },
+      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
+      pending_cancellation: { label: 'Menunggu Pembatalan', variant: 'secondary' as const, color: 'bg-orange-100 text-orange-800' },
+    }
+
+    const config = statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'secondary' as const, color: 'bg-gray-100 text-gray-800' }
+    return config
   }
+
   const getPaymentStatusBadge = (paymentStatus: string) => {
     const statusConfig = {
-      pending: { label: 'Menunggu', variant: 'secondary' as const, className: 'bg-yellow-100 text-yellow-800' },
-      paid: { label: 'Lunas', variant: 'default' as const, className: 'bg-green-500 text-white' },
-      settlement: { label: 'Lunas', variant: 'default' as const, className: 'bg-green-500 text-white' },
-      failed: { label: 'Gagal', variant: 'destructive' as const, className: 'bg-red-100 text-red-800' },
-      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, className: 'bg-red-100 text-red-800' },
-      expired: { label: 'Kedaluwarsa', variant: 'destructive' as const, className: 'bg-red-100 text-red-800' },
+      pending: { label: 'Menunggu', variant: 'secondary' as const, color: 'bg-yellow-100 text-yellow-800' },
+      paid: { label: 'Lunas', variant: 'default' as const, color: 'bg-green-500 text-white' },
+      settlement: { label: 'Lunas', variant: 'default' as const, color: 'bg-green-500 text-white' },
+      failed: { label: 'Gagal', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
+      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
+      expired: { label: 'Kedaluwarsa', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
     }
-    
-    return statusConfig[paymentStatus as keyof typeof statusConfig] || { label: paymentStatus, variant: 'secondary' as const, className: 'bg-gray-100 text-gray-800' }
+
+    const config = statusConfig[paymentStatus as keyof typeof statusConfig] || { label: paymentStatus, variant: 'secondary' as const, color: 'bg-gray-100 text-gray-800' }
+    return config
   }
+
   const handleViewOrder = (orderId: string) => {
     router.push(`/orders/${orderId}`)
+  }
+
+  const handlePayment = async (orderId: string) => {
+    try {
+      const order = orders.find(o => o.id === orderId)
+      if (!order) return      // Generate unique order_id by appending timestamp to avoid "order_id already taken" error
+      const uniqueOrderId = `${order.order_number}-${Date.now()}`
+
+      // Prepare detailed item details for better QRIS support
+      const itemDetails = []
+      
+      // Base service cost
+      const baseAmount = order.service_type === 'kiloan' 
+        ? (order.weight || 1) * 8000 
+        : order.total_amount - (order.pickup_option === 'pickup' ? 5000 : 0) - (order.delivery_option === 'delivery' ? 5000 : 0)
+      
+      itemDetails.push({
+        id: `service-${order.service_types?.type || 'laundry'}`,
+        name: `${order.service_types?.name || 'Layanan Laundry'}${order.service_type === 'kiloan' ? ` (${order.weight || 1} kg)` : ''}`,
+        price: baseAmount,
+        quantity: 1,
+      })
+
+      // Add pickup fee if applicable
+      if (order.pickup_option === 'pickup') {
+        itemDetails.push({
+          id: 'pickup-fee',
+          name: 'Biaya Pickup',
+          price: 5000,
+          quantity: 1,
+        })
+      }
+
+      // Add delivery fee if applicable  
+      if (order.delivery_option === 'delivery') {
+        itemDetails.push({
+          id: 'delivery-fee',
+          name: 'Biaya Delivery',
+          price: 5000,
+          quantity: 1,
+        })
+      }
+
+      const response = await fetch('/api/payment/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          order_id: uniqueOrderId,
+          amount: order.total_amount,
+          customer_details: {
+            first_name: order.customer_name,
+            phone: order.customer_phone,
+            email: `${order.customer_name.toLowerCase().replace(/\s+/g, '')}@laundrybiner.com`,
+          },
+          item_details: itemDetails,
+        }),
+      })
+
+      const data = await response.json()
+        if (data.success && data.payment_url) {
+        // Redirect to Midtrans payment page
+        window.location.href = data.payment_url
+      } else {
+        showError('Gagal Membuat Pembayaran', data.message || 'Unknown error')
+      }
+    } catch (error) {
+      console.error('Payment error:', error)
+      showError('Gagal Membuat Pembayaran', 'Terjadi kesalahan saat memproses pembayaran')
+    }
   }
 
   const handleBackToHome = () => {
     router.push('/')
   }
+
   const handleNewOrder = () => {
     router.push('/order')
   }
+
   // Filter orders based on active tab
   const getFilteredOrders = () => {
     if (activeTab === 'active') {
-      return orders.filter(order => 
-        order.status !== 'delivered' && 
-        order.status !== 'cancelled' && 
+      return orders.filter(order =>
+        order.status !== 'delivered' &&
+        order.status !== 'cancelled' &&
         order.payment_status !== 'failed' &&
         order.payment_status !== 'expired'
       )
     } else {
-      return orders.filter(order => 
-        order.status === 'delivered' || 
+      return orders.filter(order =>
+        order.status === 'delivered' ||
         order.status === 'cancelled' ||
         order.payment_status === 'failed' ||
         order.payment_status === 'expired'
@@ -112,17 +282,17 @@ export default function OrdersPage() {
 
   // Get counts for tabs
   const getActiveOrdersCount = () => {
-    return orders.filter(order => 
-      order.status !== 'delivered' && 
-      order.status !== 'cancelled' && 
+    return orders.filter(order =>
+      order.status !== 'delivered' &&
+      order.status !== 'cancelled' &&
       order.payment_status !== 'failed' &&
       order.payment_status !== 'expired'
     ).length
   }
 
   const getHistoryOrdersCount = () => {
-    return orders.filter(order => 
-      order.status === 'delivered' || 
+    return orders.filter(order =>
+      order.status === 'delivered' ||
       order.status === 'cancelled' ||
       order.payment_status === 'failed' ||
       order.payment_status === 'expired'
@@ -131,10 +301,11 @@ export default function OrdersPage() {
 
   const filteredOrders = getFilteredOrders()
 
-  if (loading) {    return (
+  if (loading) {
+    return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0F4C75] mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Memuat pesanan...</p>
         </div>
       </div>
@@ -148,7 +319,8 @@ export default function OrdersPage() {
           <CardContent className="p-8 text-center">
             <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Error</h1>
-            <p className="text-gray-600 mb-6">{error}</p>            <Button onClick={handleBackToHome} className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white">
+            <p className="text-gray-600 mb-6">{error}</p>
+            <Button onClick={handleBackToHome} className="w-full">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Kembali ke Beranda
             </Button>
@@ -156,25 +328,25 @@ export default function OrdersPage() {
         </Card>
       </div>
     )
-  }  return (
+  }
+
+  return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
             {/* Header */}
-            <div className="flex items-center py-6">
-              <Button 
-                variant="ghost" 
-                size="sm" 
+            <div className="flex items-center py-4">
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={handleBackToHome}
                 className="mr-3 p-2"
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <h1 className="text-2xl font-bold text-gray-900">Pesanan Saya</h1>
-            </div>
-
-            {/* Tabs */}
+              <h1 className="text-xl font-semibold text-gray-900">Pesanan Saya</h1>
+            </div>            {/* Tabs */}
             <div className="flex border-b">
               <button
                 onClick={() => setActiveTab('active')}
@@ -213,13 +385,13 @@ export default function OrdersPage() {
                     {activeTab === 'active' ? 'Belum ada pesanan aktif' : 'Belum ada riwayat pesanan'}
                   </h2>
                   <p className="text-gray-500 text-sm">
-                    {activeTab === 'active' 
-                      ? 'Buat pesanan laundry baru sekarang' 
+                    {activeTab === 'active'
+                      ? 'Buat pesanan laundry baru sekarang'
                       : 'Riwayat pesanan yang sudah selesai akan muncul di sini'
                     }
                   </p>
-                </div>
-                {activeTab === 'active' && (                  <Button 
+                </div>                {activeTab === 'active' && (
+                  <Button
                     onClick={handleNewOrder}
                     className="bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white px-6 py-2 rounded-lg"
                   >
@@ -227,14 +399,14 @@ export default function OrdersPage() {
                   </Button>
                 )}
               </div>
-            ) : (
-              <div className="space-y-4">                {filteredOrders.map((order) => (
-                  <Card key={order.id} className="hover:shadow-lg transition-shadow border-gray-200">
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle className="text-lg text-gray-900">{order.order_number}</CardTitle>
-                          <p className="text-sm text-gray-600">
+            ) : (              <div className="space-y-4">
+                {filteredOrders.map((order) => (
+                  <Card key={order.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg font-semibold text-gray-900">{order.order_number}</CardTitle>
+                          <p className="text-sm text-gray-600 mt-1">
                             {new Date(order.created_at).toLocaleDateString('id-ID', {
                               year: 'numeric',
                               month: 'long',
@@ -243,56 +415,82 @@ export default function OrdersPage() {
                               minute: '2-digit'
                             })}
                           </p>
-                        </div>                        <div className="text-right">
+                        </div>
+                        <div className="text-left sm:text-right">
                           <p className="text-2xl font-bold text-[#0F4C75]">
                             Rp {order.total_amount.toLocaleString()}
                           </p>
-                          <div className="flex gap-2 mt-2">
-                            <Badge className={getStatusBadge(order.status).className}>
-                              {getStatusBadge(order.status).label}
+                          <div className="flex gap-2 mt-2 sm:justify-end">
+                            <Badge className={getStatusBadge(order.status, order).color} variant="secondary">
+                              {getStatusBadge(order.status, order).label}
                             </Badge>
-                            <Badge className={getPaymentStatusBadge(order.payment_status).className}>
+                            <Badge className={getPaymentStatusBadge(order.payment_status).color} variant="secondary">
                               {getPaymentStatusBadge(order.payment_status).label}
                             </Badge>
                           </div>
                         </div>
                       </div>
-                    </CardHeader>                    <CardContent>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center space-x-2">
+                    </CardHeader><CardContent>
+                      {/* Countdown Timer for pending payments */}
+                      {order.payment_status === 'pending' && (
+                        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <CreditCard className="h-4 w-4 text-amber-600" />
+                              <span className="text-sm font-medium text-amber-800">
+                                Menunggu Pembayaran
+                              </span>
+                            </div>
+                            <CountdownTimer 
+                              createdAt={order.created_at} 
+                              compact={true}
+                              className="text-amber-700"
+                            />
+                          </div>
+                        </div>
+                      )}                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                          <div className="flex items-center gap-2">
                             <Package className="h-4 w-4 text-gray-400" />
                             <span className="text-sm text-gray-600">{order.service_types?.name || 'N/A'}</span>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-gray-400" />
                             <span className="text-sm text-gray-600">{order.customer_name}</span>
                           </div>
                           {order.pickup_date && (
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-gray-400" />
                               <span className="text-sm text-gray-600">
                                 {new Date(order.pickup_date).toLocaleDateString('id-ID')}
                               </span>
                             </div>
                           )}
-                        </div>                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleViewOrder(order.id)}
-                          className="flex items-center gap-2 border-[#0F4C75] text-[#0F4C75] hover:bg-[#0F4C75] hover:text-white"
-                        >
-                          <Eye className="h-4 w-4" />
-                          Detail
-                        </Button>
+                        </div>
+                        <div className="flex justify-start sm:justify-end">
+                          <OrderActionButtons order={order} onPayment={handlePayment} onViewDetail={handleViewOrder} />
+                        </div>
                       </div>
                     </CardContent>
-                  </Card>                ))}
+                  </Card>
+                ))}
               </div>
             )}
-          </div>
-        </div>
+          </div>        </div>
       </div>
+
+      {/* Custom Alert Dialog */}
+      <AlertDialog
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        confirmText={alertState.confirmText}
+        cancelText={alertState.cancelText}
+        onConfirm={alertState.onConfirm}
+        showCancel={alertState.showCancel}
+      />
     </div>
   )
 }

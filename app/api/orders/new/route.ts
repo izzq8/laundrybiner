@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin, supabase } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {
+    // Get authorization header for user authentication
+    const authHeader = request.headers.get('authorization');
+    let user_id = null;
+    
+    // Try to get user ID if authenticated
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      
+      if (!authError && user) {
+        user_id = user.id;
+        console.log('Authenticated user ID:', user_id);
+      } else {
+        console.log('User not authenticated, creating order without user_id');
+      }
+    }
+
     const body = await request.json();
     console.log('Order creation request body:', body);
 
@@ -75,11 +87,10 @@ export async function POST(request: NextRequest) {
     const deliveryFee = deliveryOption === 'delivery' ? 5000 : 0;
     const totalAmount = baseAmount + pickupFee + deliveryFee;
 
-    console.log(`Calculated total amount: ${totalAmount} with pickup fee: ${pickupFee} and delivery fee: ${deliveryFee}`);
-
-    // Prepare order data - ONLY fields that exist in the database schema
+    console.log(`Calculated total amount: ${totalAmount} with pickup fee: ${pickupFee} and delivery fee: ${deliveryFee}`);    // Prepare order data - ONLY fields that exist in the database schema
     const orderData = {
       // Required fields from database schema
+      user_id: user_id, // Add user_id if user is authenticated
       service_type_id: serviceTypeId,
       total_amount: totalAmount,
       customer_name: contactName,
@@ -105,10 +116,8 @@ export async function POST(request: NextRequest) {
       midtrans_order_id: transactionId
     };
 
-    console.log('Order data to insert:', JSON.stringify(orderData, null, 2));
-
-    // Insert order
-    const { data: order, error: insertError } = await supabase
+    console.log('Order data to insert:', JSON.stringify(orderData, null, 2));    // Insert order
+    const { data: order, error: insertError } = await supabaseAdmin
       .from('orders')
       .insert([orderData])
       .select()

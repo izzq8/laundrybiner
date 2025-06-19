@@ -1,11 +1,15 @@
 "use client"
-
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, MapPin, Phone, User, Package, CheckCircle, Truck, ArrowLeft, Receipt, CreditCard } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { AlertDialog } from "@/components/ui/alert-dialog"
+import { Calendar, Clock, MapPin, Phone, User, Package, CheckCircle, Truck, ArrowLeft, Receipt, CreditCard, Timer, X, AlertTriangle } from "lucide-react"
+import { CountdownTimer, useCanMakePayment } from "@/components/countdown-timer"
+import { useAutoPaymentCheck } from '@/hooks/useAutoPaymentCheck'
+import { useAlert } from '@/hooks/useAlert'
 
 interface Order {
   id: string
@@ -21,6 +25,12 @@ interface Order {
   notes?: string
   weight?: number
   created_at: string
+  service_type?: string
+  pickup_option?: string
+  delivery_option?: string
+  delivery_address?: string
+  delivery_date?: string
+  delivery_time?: string
   service_types?: {
     name: string
     type: string
@@ -35,18 +45,48 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelling, setCancelling] = useState(false)
+  
+  // Alert hook
+  const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
+  
+  // Use the hook to determine if payment can be made
+  const canMakePayment = useCanMakePayment(
+    order?.created_at || '', 
+    order?.payment_status || '', 
+    order?.status || ''
+  )
+
+  // Add auto payment check hook
+  const { isChecking, lastChecked, checkNow } = useAutoPaymentCheck({
+    orderId: order?.id || '',
+    paymentStatus: order?.payment_status || 'pending',
+    orderStatus: order?.status || 'pending',
+    enabled: !!order && order.payment_status === 'pending',
+    intervalMs: 30000, // Check every 30 seconds
+    onStatusUpdate: async (newStatus) => {
+      console.log(`🔄 Payment status updated to: ${newStatus}`)
+      // Refresh order data when payment status changes
+      if (order?.id) {
+        await fetchOrderDetail(order.id)
+      }
+    },
+  })
 
   useEffect(() => {
     if (params.orderId) {
       fetchOrderDetail(params.orderId as string)
-    }
-  }, [params.orderId])
+    }  }, [params.orderId])
+
   const fetchOrderDetail = async (orderId: string) => {
     try {
       console.log('Fetching order detail for ID:', orderId)
       const response = await fetch(`/api/orders/${orderId}`)
       console.log('Response status:', response.status)
-      
+
       if (response.ok) {
         const data = await response.json()
         console.log('Response data:', data)
@@ -68,20 +108,242 @@ export default function OrderDetailPage() {
       setLoading(false)
     }
   }
+  const handlePayment = async () => {
+    if (!order) return
+
+    console.log('Starting payment process for order:', order.id)
+    console.log('Order details:', {
+      id: order.id,
+      total_amount: order.total_amount,
+      customer_name: order.customer_name,
+      service_types: order.service_types
+    })
+
+    setRefreshing(true)
+    try {      // Generate unique order_id by appending timestamp to avoid "order_id already taken" error
+      const uniqueOrderId = `${order.order_number}-${Date.now()}`
+      
+      // Prepare detailed item details for better QRIS support
+      const itemDetails = []
+      
+      // Base service cost
+      const baseAmount = order.service_type === 'kiloan' 
+        ? (order.weight || 1) * 8000 
+        : order.total_amount - (order.pickup_option === 'pickup' ? 5000 : 0) - (order.delivery_option === 'delivery' ? 5000 : 0)
+      
+      itemDetails.push({
+        id: `service-${order.service_types?.type || 'laundry'}`,
+        name: `${order.service_types?.name || 'Layanan Laundry'}${order.service_type === 'kiloan' ? ` (${order.weight || 1} kg)` : ''}`,
+        price: baseAmount,
+        quantity: 1,
+      })
+
+      // Add pickup fee if applicable
+      if (order.pickup_option === 'pickup') {
+        itemDetails.push({
+          id: 'pickup-fee',
+          name: 'Biaya Pickup',
+          price: 5000,
+          quantity: 1,
+        })
+      }
+
+      // Add delivery fee if applicable  
+      if (order.delivery_option === 'delivery') {
+        itemDetails.push({
+          id: 'delivery-fee',
+          name: 'Biaya Delivery',
+          price: 5000,
+          quantity: 1,
+        })
+      }
+      
+      const payloadData = {
+        order_id: uniqueOrderId,
+        amount: order.total_amount,
+        customer_details: {
+          first_name: order.customer_name,
+          phone: order.customer_phone,
+          email: `${order.customer_name.toLowerCase().replace(/\s+/g, '')}@laundrybiner.com`,
+        },
+        item_details: itemDetails,
+      }
+
+      console.log('Sending payload with unique order_id:', payloadData)
+
+      const response = await fetch('/api/payment/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payloadData),
+      })
+
+      const data = await response.json()
+      
+      console.log('Payment API response status:', response.status)
+      console.log('Payment API response data:', data)
+      
+      if (data.success && data.payment_url) {
+        // Update order with midtrans order ID before redirecting
+        try {
+          await fetch(`/api/orders/update-payment-status`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              orderId: order.id,
+              midtransOrderId: uniqueOrderId,
+            }),
+          })
+        } catch (error) {
+          console.error('Failed to update order with midtrans order ID:', error)
+        }
+        
+        console.log('Redirecting to payment URL:', data.payment_url)
+        // Redirect to Midtrans payment page
+        window.location.href = data.payment_url      } else {
+        console.error('Payment creation failed:', data)
+        showError('Gagal Membuat Pembayaran', data.message || 'Unknown error')
+      }}catch (error) {      console.error('Payment error:', error)
+      showError('Gagal Membuat Pembayaran', 'Terjadi kesalahan saat memproses pembayaran')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+    const refreshPaymentStatus = async () => {
+    if (!order) return
+    
+    setRefreshing(true)
+    try {
+      // Call manual status update endpoint
+      const response = await fetch('/api/payment/manual-status-update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ orderId: order.id }),
+      })
+
+      const data = await response.json()
+        if (data.success) {
+        console.log('Payment status updated:', data)
+        // Refresh order data
+        await fetchOrderDetail(order.id)
+        showSuccess('Berhasil!', 'Status pembayaran berhasil diperbarui!')
+      } else {
+        console.error('Failed to update payment status:', data.message)
+        showError('Gagal Memperbarui Status', data.message)
+      }
+    } catch (error) {
+      console.error('Error updating payment status:', error)
+      showError('Gagal Memperbarui Status', 'Terjadi kesalahan saat memperbarui status pembayaran')
+    } finally {setRefreshing(false)
+    }
+  }
+
+  const handleCancelOrder = async () => {
+    if (!order) return
+    
+    setCancelling(true)
+    try {
+      console.log('🚀 Starting cancel order process for:', order.id)
+      
+      // Try the simple API first
+      const response = await fetch('/api/orders/cancel-simple', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orderId: order.id,
+          reason: cancelReason || 'User requested cancellation'
+        }),
+      })
+
+      console.log('🔍 Cancel API Response status:', response.status)
+      const data = await response.json()
+      console.log('🔍 Cancel API Response data:', data)
+      
+      if (data.success) {
+        console.log('✅ Cancellation request submitted successfully:', data)        // Refresh order data to show updated status
+        await fetchOrderDetail(order.id)
+        setShowCancelModal(false)
+        setCancelReason('')
+        showSuccess('Permintaan Dikirim', 'Permintaan pembatalan telah dikirim. Admin akan meninjau permintaan Anda.')
+      } else {
+        console.error('❌ Failed to submit cancellation request:', data)
+        
+        // Fallback to original API if simple API fails
+        console.log('🔄 Trying fallback API...')
+        const fallbackResponse = await fetch('/api/orders/cancel', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            orderId: order.id,
+            reason: cancelReason || 'User requested cancellation'
+          }),
+        })
+
+        const fallbackData = await fallbackResponse.json()
+          if (fallbackData.success) {
+          console.log('✅ Fallback API succeeded:', fallbackData)
+          await fetchOrderDetail(order.id)
+          setShowCancelModal(false)
+          setCancelReason('')
+          showSuccess('Permintaan Dikirim', 'Permintaan pembatalan telah dikirim. Admin akan meninjau permintaan Anda.')
+        } else {
+          console.error('❌ Both APIs failed:', fallbackData)
+          showError('Gagal Mengirim Permintaan', `${data.message}\n\nDetail: ${data.error || 'Unknown error'}`)
+        }
+      }
+    } catch (error) {
+      console.error('❌ Network error submitting cancellation request:', error)
+      showError('Gagal Mengirim Permintaan', 'Terjadi kesalahan jaringan saat mengirim permintaan pembatalan')
+    } finally {
+      setCancelling(false)
+    }  }
+
+  const canCancelOrder = () => {
+    if (!order) return false
+    // Allow cancellation only for pending and confirmed orders
+    return ['pending', 'confirmed'].includes(order.status)
+  }
   const getStatusBadge = (status: string) => {
-    const statusConfig = {
+    if (!order) return { label: status, variant: 'secondary' as const, color: 'bg-gray-100 text-gray-800' }
+    
+    const hasPickup = order.pickup_option === 'pickup'
+    const hasDelivery = order.delivery_option === 'delivery'
+      const statusConfig = {
       pending: { label: 'Menunggu', variant: 'secondary' as const, color: 'bg-yellow-100 text-yellow-800' },
       confirmed: { label: 'Dikonfirmasi', variant: 'default' as const, color: 'bg-[#0F4C75] text-white' },
-      picked_up: { label: 'Dijemput', variant: 'default' as const, color: 'bg-blue-100 text-blue-800' },
+      picked_up: { 
+        label: hasPickup ? 'Dijemput' : 'Diterima', 
+        variant: 'default' as const, 
+        color: 'bg-blue-100 text-blue-800' 
+      },
       in_process: { label: 'Diproses', variant: 'default' as const, color: 'bg-orange-100 text-orange-800' },
-      ready: { label: 'Siap', variant: 'default' as const, color: 'bg-green-100 text-green-800' },
-      delivered: { label: 'Diantar', variant: 'default' as const, color: 'bg-green-500 text-white' },
+      ready: { 
+        label: hasDelivery ? 'Siap Diantar' : 'Siap Diambil', 
+        variant: 'default' as const, 
+        color: 'bg-green-100 text-green-800' 
+      },
+      delivered: { 
+        label: hasDelivery ? 'Diantar' : 'Diambil', 
+        variant: 'default' as const, 
+        color: 'bg-green-500 text-white' 
+      },
       cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
+      pending_cancellation: { label: 'Menunggu Pembatalan', variant: 'secondary' as const, color: 'bg-orange-100 text-orange-800' },
     }
-    
+
     const config = statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'secondary' as const, color: 'bg-gray-100 text-gray-800' }
     return config
   }
+
   const getPaymentStatusBadge = (paymentStatus: string) => {
     const statusConfig = {
       pending: { label: 'Menunggu', variant: 'secondary' as const, color: 'bg-yellow-100 text-yellow-800' },
@@ -91,23 +353,77 @@ export default function OrderDetailPage() {
       cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
       expired: { label: 'Kedaluwarsa', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
     }
-    
+
     const config = statusConfig[paymentStatus as keyof typeof statusConfig] || { label: paymentStatus, variant: 'secondary' as const, color: 'bg-gray-100 text-gray-800' }
     return config
   }
-
   const getOrderSteps = () => {
-    const steps = [
+    if (!order) return []
+
+    // Dynamic steps based on pickup/delivery options
+    const hasPickup = order.pickup_option === 'pickup'
+    const hasDelivery = order.delivery_option === 'delivery'
+
+    let steps = [
       { key: 'pending', label: 'Pesanan Dibuat', icon: Package, description: 'Pesanan telah dibuat dan menunggu konfirmasi' },
-      { key: 'confirmed', label: 'Pesanan Dikonfirmasi', icon: CheckCircle, description: 'Pesanan dikonfirmasi dan siap dijemput' },
-      { key: 'picked_up', label: 'Dijemput', icon: Truck, description: 'Cucian telah dijemput dari alamat Anda' },
-      { key: 'in_process', label: 'Sedang Diproses', icon: Package, description: 'Cucian sedang dalam proses pencucian' },
-      { key: 'ready', label: 'Siap Diantar', icon: CheckCircle, description: 'Cucian sudah selesai dan siap diantar' },
-      { key: 'delivered', label: 'Selesai', icon: CheckCircle, description: 'Cucian telah diantar ke alamat Anda' }
+      { key: 'confirmed', label: 'Pesanan Dikonfirmasi', icon: CheckCircle, description: 'Pesanan dikonfirmasi dan siap diproses' },
     ]
 
+    // Add pickup step if pickup is selected
+    if (hasPickup) {
+      steps.push({ 
+        key: 'picked_up', 
+        label: 'Dijemput', 
+        icon: Truck, 
+        description: 'Cucian telah dijemput dari alamat Anda' 
+      })
+    } else {
+      steps.push({ 
+        key: 'picked_up', 
+        label: 'Diterima', 
+        icon: Package, 
+        description: 'Cucian telah diterima di tempat kami' 
+      })
+    }
+
+    steps.push({ 
+      key: 'in_process', 
+      label: 'Sedang Diproses', 
+      icon: Package, 
+      description: 'Cucian sedang dalam proses pencucian' 
+    })
+
+    // Add delivery/ready step based on delivery option
+    if (hasDelivery) {
+      steps.push({ 
+        key: 'ready', 
+        label: 'Siap Diantar', 
+        icon: CheckCircle, 
+        description: 'Cucian sudah selesai dan siap diantar' 
+      })
+      steps.push({ 
+        key: 'delivered', 
+        label: 'Diantar', 
+        icon: Truck, 
+        description: 'Cucian telah diantar ke alamat Anda' 
+      })
+    } else {
+      steps.push({ 
+        key: 'ready', 
+        label: 'Siap Diambil', 
+        icon: CheckCircle, 
+        description: 'Cucian sudah selesai dan siap diambil' 
+      })
+      steps.push({ 
+        key: 'delivered', 
+        label: 'Diambil', 
+        icon: CheckCircle, 
+        description: 'Cucian telah diambil' 
+      })
+    }
+
     const currentStatusIndex = steps.findIndex(step => step.key === order?.status)
-    
+
     return steps.map((step, index) => ({
       ...step,
       completed: index <= currentStatusIndex,
@@ -115,7 +431,8 @@ export default function OrderDetailPage() {
     }))
   }
 
-  if (loading) {    return (
+  if (loading) {
+    return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0F4C75] mx-auto mb-4"></div>
@@ -136,14 +453,17 @@ export default function OrderDetailPage() {
             </h1>
             <p className="text-gray-600 mb-6">
               {error || 'Pesanan yang Anda cari tidak ditemukan.'}
-            </p>            <Button onClick={() => router.push('/orders')}>
+            </p>
+            <Button onClick={() => router.push('/orders')}>
               Kembali ke Pesanan
             </Button>
           </CardContent>
         </Card>
       </div>
     )
-  }  return (
+  }
+
+  return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b">
@@ -151,9 +471,9 @@ export default function OrderDetailPage() {
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center justify-between py-6">
               <div className="flex items-center">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => router.push('/orders')}
                   className="mr-3 p-2"
                 >
@@ -173,10 +493,151 @@ export default function OrderDetailPage() {
         <div className="container mx-auto px-4">
           <div className="max-w-6xl mx-auto">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
+
               {/* Main Content */}
-              <div className="lg:col-span-2 space-y-6">
-                  {/* Order Progress */}
+              <div className="lg:col-span-2 space-y-6">                {/* Payment Countdown - Show only for pending payments */}
+                {order.payment_status === 'pending' && (
+                  <Card className="border-l-4 border-l-amber-500 bg-white shadow-sm">
+                    <CardContent className="p-0">
+                      {/* Header Section */}
+                      <div className="px-6 py-4 bg-gradient-to-r from-amber-50 to-orange-50">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center">
+                              <Timer className="h-4 w-4 text-white" />
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                Waktu Pembayaran Tersisa
+                              </h3>
+                              <p className="text-sm text-gray-600">
+                                Selesaikan pembayaran sebelum pesanan kedaluwarsa
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>                      {/* Countdown Display */}                      <div className="px-4 sm:px-6 py-6">                        <div className="flex items-center justify-center">
+                          <div className="text-center w-full">                            {/* Minimalist Timer Card */}
+                            <div className="bg-white border border-gray-200 rounded-lg px-6 py-10 shadow-sm">
+                              <div className="mb-4">
+                                <div className="text-sm font-medium text-gray-600 mb-4">
+                                  Batas Waktu Pembayaran
+                                </div>
+                                <div className="flex justify-center">
+                                  <CountdownTimer 
+                                    createdAt={order.created_at} 
+                                    showIcon={false} 
+                                    fontSize="large"
+                                    compact={true}
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-xs text-gray-500 tracking-wide text-center">
+                                JAM : MENIT : DETIK
+                              </div>
+                            </div>
+                            
+                            {/* Simple Progress Indicator */}
+                            <div className="mt-6 w-full max-w-sm mx-auto">
+                              <div className="bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                <div 
+                                  className="bg-amber-500 h-full rounded-full transition-all duration-1000 ease-linear"
+                                  style={{
+                                    width: `${Math.max(0, Math.min(100, 
+                                      (1 - (Date.now() - new Date(order.created_at).getTime()) / (24 * 60 * 60 * 1000)) * 100
+                                    ))}%`
+                                  }}
+                                ></div>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-2 text-center">
+                                Sisa waktu dari 24 jam
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>                      {/* Timeline Info */}
+                      <div className="px-4 sm:px-6 pb-6">
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <h4 className="text-sm font-medium text-gray-800 mb-3">Informasi Waktu</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-600">Pesanan dibuat</span>
+                              <span className="font-medium text-gray-900">
+                                {new Date(order.created_at).toLocaleDateString('id-ID', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-600">Batas pembayaran</span>
+                              <span className="font-medium text-gray-900">                                {new Date(new Date(order.created_at).getTime() + 24 * 60 * 60 * 1000).toLocaleDateString('id-ID', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}                {/* Expired payment warning */}
+                {order.payment_status === 'pending' && !canMakePayment && (
+                  <Card className="border-l-4 border-l-red-500 bg-white shadow-sm">
+                    <CardContent className="p-0">
+                      {/* Header Section */}
+                      <div className="px-6 py-4 bg-gradient-to-r from-red-50 to-pink-50">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+                            <AlertTriangle className="h-4 w-4 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              Waktu Pembayaran Habis
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                              Batas waktu pembayaran sudah habis
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Content */}
+                      <div className="px-6 py-4">
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <p className="text-sm text-gray-700 mb-3">
+                            Pesanan ini telah melewati batas waktu pembayaran 24 jam. Silakan hubungi customer service untuk bantuan lebih lanjut atau buat pesanan baru.
+                          </p>
+                          <div className="flex flex-col sm:flex-row gap-3">
+                            <Button
+                              size="sm"
+                              className="bg-red-600 hover:bg-red-700 text-white"
+                              onClick={() => window.open('https://wa.me/6289888880575', '_blank')}
+                            >
+                              Hubungi Customer Service
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => router.push('/order')}
+                            >
+                              Buat Pesanan Baru
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Order Progress */}
                 <Card className="border-gray-200 shadow-sm">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-gray-900">
@@ -190,7 +651,8 @@ export default function OrderDetailPage() {
                         const Icon = step.icon
                         return (
                           <div
-                            key={step.key}                            className={`flex items-start space-x-4 p-4 rounded-lg border ${
+                            key={step.key}
+                            className={`flex items-start space-x-4 p-4 rounded-lg border ${
                               step.active
                                 ? 'bg-[#0F4C75]/5 border-[#0F4C75]/20'
                                 : step.completed
@@ -198,7 +660,8 @@ export default function OrderDetailPage() {
                                 : 'bg-gray-50 border-gray-200'
                             }`}
                           >
-                            <div                              className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                            <div
+                              className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
                                 step.active
                                   ? 'bg-[#0F4C75] text-white'
                                   : step.completed
@@ -235,31 +698,39 @@ export default function OrderDetailPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                        <div>
-                          <h4 className="font-semibold text-gray-900">
-                            {order.service_types?.name || 'Layanan Laundry'}
-                          </h4>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {order.service_types?.description || 'Layanan pencucian'}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            Tipe: {order.service_types?.type || 'Regular'}
-                          </p>
-                          {order.weight && (
-                            <p className="text-sm text-gray-600">
-                              Estimasi Berat: {order.weight} kg
+                      <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900 text-lg">
+                              {order.service_types?.name || 'Layanan Laundry'}
+                            </h4>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {order.service_types?.description || 'Layanan pencucian'}
                             </p>
-                          )}
-                        </div>                        <div className="text-right">
-                          <p className="text-2xl font-bold text-[#0F4C75]">
-                            Rp {order.total_amount.toLocaleString()}
-                          </p>
-                          <p className="text-sm text-gray-600">Total</p>
-                        </div></div>
+                            <div className="flex items-center gap-4 mt-2">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {order.service_types?.type || 'Regular'}
+                              </span>
+                              {order.weight && (
+                                <span className="text-sm text-gray-600 font-medium">
+                                  {order.weight} kg
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right ml-4">
+                            <p className="text-2xl font-bold text-[#0F4C75]">
+                              Rp {order.total_amount.toLocaleString()}
+                            </p>
+                            <p className="text-sm text-gray-600">Total Pembayaran</p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
-                </Card>                {/* Customer Information */}
+                </Card>
+
+                {/* Customer Information */}
                 <Card className="border-gray-200 shadow-sm">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-gray-900">
@@ -277,7 +748,6 @@ export default function OrderDetailPage() {
                             <p className="font-medium">{order.customer_name}</p>
                           </div>
                         </div>
-
                         <div className="flex items-center space-x-3">
                           <Phone className="h-5 w-5 text-gray-400" />
                           <div>
@@ -285,42 +755,84 @@ export default function OrderDetailPage() {
                             <p className="font-medium">{order.customer_phone}</p>
                           </div>
                         </div>
-                      </div>
+                      </div>                      <div className="space-y-4">
+                        {/* Pickup Information */}
+                        {order.pickup_option === 'pickup' && (
+                          <>
+                            <div className="flex items-center space-x-3">
+                              <Calendar className="h-5 w-5 text-green-500" />
+                              <div>
+                                <p className="text-sm text-gray-600">Tanggal Penjemputan</p>
+                                <p className="font-medium">
+                                  {new Date(order.pickup_date).toLocaleDateString('id-ID', {
+                                    weekday: 'long',
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                              <Clock className="h-5 w-5 text-green-500" />
+                              <div>
+                                <p className="text-sm text-gray-600">Waktu Penjemputan</p>
+                                <p className="font-medium">{order.pickup_time}</p>
+                              </div>
+                            </div>
+                          </>
+                        )}
 
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-3">
-                          <Calendar className="h-5 w-5 text-gray-400" />
-                          <div>
-                            <p className="text-sm text-gray-600">Tanggal Penjemputan</p>
-                            <p className="font-medium">
-                              {new Date(order.pickup_date).toLocaleDateString('id-ID', {
-                                weekday: 'long',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                              })}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-3">
-                          <Clock className="h-5 w-5 text-gray-400" />
-                          <div>
-                            <p className="text-sm text-gray-600">Waktu Penjemputan</p>
-                            <p className="font-medium">{order.pickup_time}</p>
-                          </div>
-                        </div>
+                        {/* Delivery Information */}
+                        {order.delivery_option === 'delivery' && (
+                          <>
+                            <div className="flex items-center space-x-3">
+                              <Calendar className="h-5 w-5 text-blue-500" />
+                              <div>
+                                <p className="text-sm text-gray-600">Tanggal Pengantaran</p>
+                                <p className="font-medium">
+                                  {order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('id-ID', {
+                                    weekday: 'long',
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                  }) : 'Belum ditentukan'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                              <Clock className="h-5 w-5 text-blue-500" />
+                              <div>
+                                <p className="text-sm text-gray-600">Waktu Pengantaran</p>
+                                <p className="font-medium">{order.delivery_time || 'Belum ditentukan'}</p>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
 
+                    {/* Address Information */}
                     <div className="mt-6 pt-6 border-t">
-                      <div className="flex items-start space-x-3">
-                        <MapPin className="h-5 w-5 text-gray-400 mt-1" />
-                        <div>
-                          <p className="text-sm text-gray-600">Alamat Penjemputan</p>
-                          <p className="font-medium">{order.pickup_address}</p>
+                      {order.pickup_option === 'pickup' && (
+                        <div className="flex items-start space-x-3 mb-4">
+                          <MapPin className="h-5 w-5 text-green-500 mt-1" />
+                          <div>
+                            <p className="text-sm text-gray-600">Alamat Penjemputan</p>
+                            <p className="font-medium">{order.pickup_address}</p>
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {order.delivery_option === 'delivery' && (
+                        <div className="flex items-start space-x-3">
+                          <MapPin className="h-5 w-5 text-blue-500 mt-1" />
+                          <div>
+                            <p className="text-sm text-gray-600">Alamat Pengantaran</p>
+                            <p className="font-medium">{order.delivery_address || 'Sama dengan alamat penjemputan'}</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {order.notes && (
@@ -331,7 +843,9 @@ export default function OrderDetailPage() {
                     )}
                   </CardContent>
                 </Card>
-              </div>              {/* Sidebar */}
+              </div>
+
+              {/* Sidebar */}
               <div className="lg:col-span-1">
                 <Card className="sticky top-4 border-gray-200 shadow-sm">
                   <CardHeader>
@@ -339,22 +853,21 @@ export default function OrderDetailPage() {
                       <CreditCard className="h-5 w-5" />
                       Ringkasan Pembayaran
                     </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
+                  </CardHeader>                  <CardContent className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center py-2">
                         <span className="text-sm text-gray-600">Nomor Pesanan</span>
-                        <span className="text-sm font-medium">{order.order_number}</span>
+                        <span className="text-sm font-medium font-mono">{order.order_number}</span>
                       </div>
-                      
-                      <div className="flex justify-between items-center">
+
+                      <div className="flex justify-between items-center py-2">
                         <span className="text-sm text-gray-600">Status Pesanan</span>
                         <Badge className={getStatusBadge(order.status).color} variant="secondary">
                           {getStatusBadge(order.status).label}
                         </Badge>
                       </div>
-                      
-                      <div className="flex justify-between items-center">
+
+                      <div className="flex justify-between items-center py-2">
                         <span className="text-sm text-gray-600">Status Pembayaran</span>
                         <Badge className={getPaymentStatusBadge(order.payment_status).color} variant="secondary">
                           {getPaymentStatusBadge(order.payment_status).label}
@@ -363,24 +876,25 @@ export default function OrderDetailPage() {
                     </div>
 
                     <div className="border-t pt-4">
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Biaya Layanan</span>
-                          <span>Rp {order.total_amount.toLocaleString()}</span>
+                          <span className="font-medium">Rp {order.total_amount.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Biaya Admin</span>
-                          <span>Rp 0</span>
-                        </div>                        <div className="flex justify-between items-center font-bold text-lg border-t pt-2">
+                          <span className="font-medium">Rp 0</span>
+                        </div>
+                        <div className="flex justify-between items-center font-bold text-lg border-t pt-3">
                           <span>Total Pembayaran</span>
                           <span className="text-[#0F4C75]">Rp {order.total_amount.toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="text-xs text-gray-500 pt-4 border-t">
-                      <p className="mb-1">
-                        <strong>Tanggal Pemesanan:</strong><br />
+                    <div className="text-xs text-gray-500 pt-4 border-t bg-gray-50 p-3 rounded-lg">
+                      <p className="font-medium text-gray-700 mb-1">Tanggal Pemesanan</p>
+                      <p>
                         {new Date(order.created_at).toLocaleDateString('id-ID', {
                           year: 'numeric',
                           month: 'long',
@@ -389,27 +903,128 @@ export default function OrderDetailPage() {
                           minute: '2-digit'
                         })}
                       </p>
-                    </div>                    <div className="space-y-2 pt-4">
-                      <Button
-                        onClick={() => router.push('/orders')}
-                        className="w-full"
-                        variant="outline"
-                      >
-                        Kembali ke Daftar Pesanan
-                      </Button>
-                      <Button
-                        onClick={() => router.push('/')}
-                        className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white"
-                      >
-                        Beranda
-                      </Button>
+                    </div><div className="space-y-3 pt-4">
+                      {/* Payment Button - Show only if payment is needed */}
+                      {canMakePayment && (
+                        <Button
+                          onClick={handlePayment}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white"
+                          disabled={refreshing}
+                        >
+                          {refreshing ? 'Memproses...' : 'Bayar Sekarang'}
+                        </Button>
+                      )}
+
+                      {/* Payment Status Actions for Pending Payments */}
+                      {order.payment_status === 'pending' && (
+                        <>
+                          <Button
+                            onClick={refreshPaymentStatus}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                            disabled={refreshing || isChecking}
+                          >
+                            {refreshing ? 'Memperbarui...' : isChecking ? 'Auto-checking...' : 'Perbarui Status Pembayaran'}
+                          </Button>
+                          
+                          {/* Auto-check status indicator */}
+                          <div className="text-xs text-center text-gray-500 bg-gray-50 p-2 rounded-lg">
+                            <div className="flex items-center justify-center gap-1">
+                              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                              <span>Auto-checking setiap 30 detik...</span>
+                            </div>
+                            {lastChecked && (
+                              <div className="mt-1">
+                                Terakhir dicek: {lastChecked.toLocaleTimeString()}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}                      {/* Cancel Order Button - Show only if order can be cancelled */}
+                      {canCancelOrder() && (
+                        <Button
+                          onClick={() => setShowCancelModal(true)}
+                          variant="outline"
+                          className="w-full border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400"
+                          disabled={cancelling}
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          {cancelling ? 'Mengirim...' : 'Batalkan Pesanan'}
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
-                </Card>              </div>
-            </div>
+                </Card>
+              </div>            </div>
           </div>
         </div>
       </div>
+
+      {/* Cancel Order Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Batalkan Pesanan</h3>
+                <p className="text-sm text-gray-600">Pesanan #{order?.order_number}</p>
+              </div>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-3">
+                Apakah Anda yakin ingin membatalkan pesanan ini? Admin akan meninjau permintaan pembatalan Anda.
+              </p>
+              
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Alasan pembatalan (opsional):
+              </label>
+              <Textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Jelaskan alasan Anda membatalkan pesanan..."
+                className="w-full"
+                rows={3}
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCancelModal(false)
+                  setCancelReason('')
+                }}
+                className="flex-1"
+                disabled={cancelling}
+              >
+                Batal
+              </Button>
+              <Button
+                onClick={handleCancelOrder}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                disabled={cancelling}
+              >
+                {cancelling ? 'Mengirim...' : 'Ya, Batalkan'}
+              </Button>
+            </div>          </div>
+        </div>
+      )}
+
+      {/* Custom Alert Dialog */}
+      <AlertDialog
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        confirmText={alertState.confirmText}
+        cancelText={alertState.cancelText}
+        onConfirm={alertState.onConfirm}
+        showCancel={alertState.showCancel}
+      />
     </div>
   )
 }

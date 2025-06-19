@@ -9,86 +9,166 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, User, Mail, Phone, MapPin, Lock, LogOut, Trash2, Info } from "lucide-react"
-import { signOut, supabase } from "@/lib/supabase"
+import { signOut, getCurrentUser, getUserProfile, updateUserProfile, supabase } from "@/lib/supabase"
+import { useToast } from "@/components/ui/use-toast"
+import { AddressDialog } from "@/components/address-dialog"
+import { useAlert } from "@/hooks/useAlert"
+import { AlertDialog } from "@/components/ui/alert-dialog"
 
 interface Address {
   id: string;
-  label: string;
+  label?: string;
   is_default: boolean;
-  address: string;
+  address?: string;
+  address_line?: string;
+  city?: string;
+  postal_code?: string;
+  notes?: string;
 }
 
 export default function ProfilePage() {
+  const { toast } = useToast()
+  const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
+  const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [loginMethod, setLoginMethod] = useState<"email" | "google" | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const [profile, setProfile] = useState({
-    name: typeof window !== "undefined" ? localStorage.getItem("userName") || "" : "",
-    email: typeof window !== "undefined" ? localStorage.getItem("userEmail") || "" : "",
-    phone: typeof window !== "undefined" ? localStorage.getItem("userPhone") || "" : "",
-  })
-
-  const [addresses] = useState<Address[]>([])
-
+    name: "",
+    email: "",
+    phone: "",  })
+  // Add state for address dialog
+  const [isAddressDialogOpen, setIsAddressDialogOpen] = useState(false)
+  const [addresses, setAddresses] = useState<Address[]>([]) // Menggunakan interface Address yang sudah didefinisikan
+  
+  // Fetch user data from Supabase
   useEffect(() => {
-    // Load user data from localStorage (in real app, this would come from Supabase)
-    const userName = localStorage.getItem("userName")
-    const userEmail = localStorage.getItem("userEmail")
-    const userPhone = localStorage.getItem("userPhone")
-    const authMethod = localStorage.getItem("authMethod") // 'email' or 'google'
-
-    if (userName || userEmail || userPhone) {
-      setProfile({
-        name: userName || "",
-        email: userEmail || "",
-        phone: userPhone || "",
-      })
+    const fetchUserData = async () => {
+      try {
+        setIsLoading(true)
+        // Get current authenticated user
+        const user = await getCurrentUser()
+        
+        if (!user) {
+          console.error("No authenticated user found")
+          window.location.href = "/auth/signin"
+          return
+        }
+        
+        setUserId(user.id)
+        
+        // Determine login method from user metadata
+        setLoginMethod(
+          user.app_metadata?.provider === "google" ? "google" : "email"
+        )
+        
+        // Get user profile from database
+        try {
+          const userProfile = await getUserProfile(user.id)
+          
+          if (userProfile) {
+            setProfile({
+              name: userProfile.name || user.user_metadata?.full_name || "",
+              email: userProfile.email || user.email || "",
+              phone: userProfile.phone || "",
+            })
+            
+            // Also store in localStorage as fallback
+            localStorage.setItem("userName", userProfile.name || user.user_metadata?.full_name || "")
+            localStorage.setItem("userEmail", userProfile.email || user.email || "")
+            localStorage.setItem("userPhone", userProfile.phone || "")
+          } else {
+            // Fallback to user auth data
+            setProfile({
+              name: user.user_metadata?.full_name || "",
+              email: user.email || "",
+              phone: "",
+            })
+          }
+          
+          // Get user addresses
+          await fetchUserAddresses(user.id)
+          
+        } catch (error) {
+          console.error("Error fetching user profile:", error)
+          // Fallback to localStorage
+          const userName = localStorage.getItem("userName")
+          const userEmail = localStorage.getItem("userEmail")
+          const userPhone = localStorage.getItem("userPhone")
+          
+          setProfile({
+            name: userName || user.user_metadata?.full_name || "",
+            email: userEmail || user.email || "",
+            phone: userPhone || "",
+          })
+        }
+      } catch (error) {
+        console.error("Error loading user data:", error)
+      } finally {
+        setIsLoading(false)
+      }
     }
 
-    // Determine login method (in real app, this would come from Supabase user metadata)
-    if (authMethod) {
-      setLoginMethod(authMethod as "email" | "google")
-    } else {
-      // Default assumption based on email domain or other logic
-      setLoginMethod("email")
-    }
+    fetchUserData()
   }, [])
-
-  const handleSave = async () => {
+  // Fetch user addresses from Supabase
+  const fetchUserAddresses = async (userId: string) => {
     try {
-      // Ambil user id dari session Supabase
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const userId = session?.user?.id
-      if (!userId) {
-        alert("User tidak ditemukan. Silakan login ulang.")
-        return
+      const { data, error } = await supabase
+        .from("addresses")
+        .select("*")
+        .eq("user_id", userId)
+        .order("is_default", { ascending: false })
+      
+      if (error) throw error
+      
+      if (data) {
+        setAddresses(data)
       }
-      // Update ke database Supabase
-      const { error } = await supabase
-        .from("users")
-        .update({
-          name: profile.name,
-          email: profile.email,
-          phone: profile.phone,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId)
-      if (error) {
-        throw error
-      }
-      // Simpan ke localStorage
-      localStorage.setItem("userName", profile.name)
-      localStorage.setItem("userEmail", profile.email)
-      localStorage.setItem("userPhone", profile.phone)
-      setIsEditing(false)
-      alert("Profil berhasil diperbarui.")
-    } catch (err) {
-      console.error("Gagal update profil:", err)
-      alert("Gagal menyimpan perubahan profil.")
+    } catch (error) {
+      console.error("Error fetching addresses:", error)
+      toast.error("Gagal memuat alamat Anda. Silakan coba lagi.")
+    }
+  }
+  
+  // Handle address added/updated
+  const handleAddressAdded = async () => {
+    if (userId) {
+      await fetchUserAddresses(userId)
+      toast.success("Alamat berhasil ditambahkan.")
     }
   }
 
+  const handleSave = async () => {
+    if (!userId) {      toast.error("User ID tidak ditemukan. Silakan login ulang.")
+      return
+    }
+    
+    setIsSaving(true)
+    
+    try {
+      // Save to local storage as backup
+      localStorage.setItem("userName", profile.name)
+      localStorage.setItem("userEmail", profile.email)
+      localStorage.setItem("userPhone", profile.phone)
+      
+      // Save to Supabase database
+      await updateUserProfile(userId, {
+        name: profile.name,
+        phone: profile.phone,
+        // Don't update email here as it requires email verification
+      })
+        toast.success("Informasi profil Anda telah diperbarui.")
+      
+      setIsEditing(false)
+    } catch (error) {
+      console.error("Error saving profile:", error)
+      toast.error("Terjadi kesalahan saat menyimpan profil. Silakan coba lagi.")
+    } finally {
+      setIsSaving(false)
+    }
+  }
   const handleLogout = async () => {
     try {
       await signOut()
@@ -103,18 +183,17 @@ export default function ProfilePage() {
       window.location.href = "/"
     } catch (error) {
       console.error("Logout error:", error)
-      alert("Gagal keluar dari akun. Silakan coba lagi.")
+      toast.error("Gagal keluar dari akun. Silakan coba lagi.")
     }
   }
-
   const handleChangePassword = () => {
     if (loginMethod === "google") {
-      alert("Anda masuk menggunakan Google. Untuk mengubah password, silakan kelola melalui akun Google Anda.")
+      showInfo("Akun Google", "Anda masuk menggunakan Google. Untuk mengubah password, silakan kelola melalui akun Google Anda.")
       return
     }
 
     // Redirect to change password page or show modal
-    alert("Fitur ganti password akan segera tersedia.")
+    showInfo("Segera Tersedia", "Fitur ganti password akan segera tersedia.")
   }
 
   return (
@@ -205,7 +284,7 @@ export default function ProfilePage() {
                 <CardTitle>Alamat Tersimpan</CardTitle>
                 <CardDescription>Kelola alamat pickup dan delivery</CardDescription>
               </div>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={() => setIsAddressDialogOpen(true)}>
                 Tambah Alamat
               </Button>
             </div>
@@ -224,14 +303,36 @@ export default function ProfilePage() {
                             <span className="text-xs bg-[#0F4C75] text-white px-2 py-1 rounded">Default</span>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600">{address.address}</p>
+                        <p className="text-sm text-gray-600">{address.address_line || address.address}</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
                       <Button variant="ghost" size="sm">
                         Edit
-                      </Button>
-                      <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
+                      </Button>                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-red-600 hover:text-red-700"
+                        onClick={async () => {
+                          try {
+                            if (!window.confirm('Yakin ingin menghapus alamat ini?')) return;
+                            
+                            const { error } = await supabase
+                              .from('addresses')
+                              .delete()
+                              .eq('id', address.id);
+                              
+                            if (error) throw error;
+                            
+                            toast.success('Alamat berhasil dihapus');
+                            // Refresh addresses
+                            if (userId) fetchUserAddresses(userId);
+                          } catch (error) {
+                            console.error('Error deleting address:', error);
+                            toast.error('Gagal menghapus alamat');
+                          }
+                        }}
+                      >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -241,41 +342,41 @@ export default function ProfilePage() {
                 <div className="text-center py-8">
                   <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                   <h4 className="font-medium text-gray-900 mb-2">Belum ada alamat tersimpan</h4>
-                  <p className="text-sm text-gray-600 mb-4">Tambahkan alamat untuk mempercepat proses pemesanan</p>
-                  <Button size="sm" className="bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white">
+                  <p className="text-sm text-gray-600 mb-4">Tambahkan alamat untuk mempercepat proses pemesanan</p>                  <Button 
+                    size="sm" 
+                    className="bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white"
+                    onClick={() => setIsAddressDialogOpen(true)}
+                  >
                     Tambah Alamat Pertama
                   </Button>
                 </div>
               )}
             </div>
           </CardContent>
-        </Card>
-
-        {/* Security Settings */}
+        </Card>        {/* Security Settings */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Keamanan</CardTitle>
             <CardDescription>Kelola password dan keamanan akun</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {loginMethod === "google" && (
+            {loginMethod === "google" ? (
               <Alert>
                 <Info className="h-4 w-4" />
                 <AlertDescription>
                   Anda masuk menggunakan Google. Password dikelola melalui akun Google Anda.
                 </AlertDescription>
               </Alert>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={handleChangePassword}
+              >
+                <Lock className="w-4 h-4 mr-2" />
+                Ganti Password
+              </Button>
             )}
-
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              onClick={handleChangePassword}
-              disabled={loginMethod === "google"}
-            >
-              <Lock className="w-4 h-4 mr-2" />
-              {loginMethod === "google" ? "Password Dikelola Google" : "Ganti Password"}
-            </Button>
           </CardContent>
         </Card>
 
@@ -314,7 +415,22 @@ export default function ProfilePage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </div>      {/* Address Dialog - Separate from the main return to avoid hydration issues */}
+      {userId && (        <AddressDialog
+          isOpen={isAddressDialogOpen}
+          onOpenChange={setIsAddressDialogOpen}
+          userId={userId}
+          onAddressAdded={handleAddressAdded}
+        />
+      )}
+
+      <AlertDialog
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+      />
     </div>
   )
 }

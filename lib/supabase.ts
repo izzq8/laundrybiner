@@ -200,20 +200,58 @@ export const getItemTypes = async () => {
 }
 
 export const getUserProfile = async (userId: string) => {
-  const { data, error } = await supabase.from("users").select("*").eq("id", userId).single()
+  // Try to get data from profiles table first
+  const { data: profileData, error: profileError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .single();
+  
+  // If we successfully got profile data, return it
+  if (!profileError && profileData) {
+    return profileData as User;
+  }
+  
+  // If profiles lookup failed, try users table as fallback
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", userId)
+    .single();
 
   if (error) {
     console.error("Error fetching user profile:", error)
-    throw error
+    // Don't throw error, just return null so app can fall back to default data
+    return null;
   }
 
-  return data as User
+  return data as User;
 }
 
 export const updateUserProfile = async (userId: string, updates: Partial<User>) => {
+  // Try updating the profiles table first
+  const { data: profileData, error: profileError } = await supabase
+    .from("profiles")
+    .update({ 
+      ...updates, 
+      updated_at: new Date().toISOString() 
+    })
+    .eq("id", userId)
+    .select()
+    .single()
+
+  // If profiles table update is successful, return the data
+  if (!profileError) {
+    return profileData as User;
+  }
+
+  // If profiles update failed, try the users table as fallback
   const { data, error } = await supabase
     .from("users")
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update({ 
+      ...updates, 
+      updated_at: new Date().toISOString() 
+    })
     .eq("id", userId)
     .select()
     .single()

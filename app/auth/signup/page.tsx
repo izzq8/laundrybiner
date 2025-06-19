@@ -9,12 +9,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { AlertDialog } from "@/components/ui/alert-dialog"
 import { Sparkles, Mail, Lock, User, Eye, EyeOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { signInWithGoogle, signUpWithEmail } from "@/lib/supabase"
+import { useAlert } from '@/hooks/useAlert'
 
-export default function SignUpPage() {
-  const [formData, setFormData] = useState({
+export default function SignUpPage() {  const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
@@ -25,6 +26,9 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const router = useRouter()
+  
+  // Alert hook
+  const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -32,17 +36,16 @@ export default function SignUpPage() {
       [e.target.name]: e.target.value,
     })
   }
-
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (formData.password !== formData.confirmPassword) {
-      alert("Password tidak cocok!")
+      showWarning("Password Tidak Cocok", "Password dan konfirmasi password harus sama!")
       return
     }
 
     if (formData.password.length < 6) {
-      alert("Password harus minimal 6 karakter!")
+      showWarning("Password Terlalu Pendek", "Password harus minimal 6 karakter!")
       return
     }
 
@@ -56,18 +59,18 @@ export default function SignUpPage() {
         localStorage.setItem("userName", formData.name)
         localStorage.setItem("userEmail", formData.email)
 
-        alert("Akun berhasil dibuat!")
+        showSuccess("Akun Berhasil Dibuat", "Selamat datang! Akun Anda telah berhasil dibuat.")
         router.push("/dashboard")
       }
     } catch (error: any) {
       console.error("Sign up error:", error)
 
       if (error.message?.includes("User already registered")) {
-        alert("Email sudah terdaftar. Silakan gunakan email lain atau masuk dengan akun yang ada.")
+        showError("Email Sudah Terdaftar", "Email sudah terdaftar. Silakan gunakan email lain atau masuk dengan akun yang ada.")
       } else if (error.message?.includes("Password should be at least 6 characters")) {
-        alert("Password harus minimal 6 karakter.")
+        showWarning("Password Terlalu Pendek", "Password harus minimal 6 karakter.")
       } else {
-        alert("Gagal membuat akun. Silakan coba lagi.")
+        showError("Gagal Membuat Akun", "Gagal membuat akun. Silakan coba lagi.")
       }
     } finally {
       setLoading(false)
@@ -85,11 +88,10 @@ export default function SignUpPage() {
 
       if (error.message?.includes("popup_closed_by_user")) {
         // User closed the popup, no need to show error
-        return
-      } else if (error.message?.includes("access_denied")) {
-        alert("Akses ditolak. Silakan coba lagi dan berikan izin yang diperlukan.")
+        return      } else if (error.message?.includes("access_denied")) {
+        showError("Akses Ditolak", "Silakan coba lagi dan berikan izin yang diperlukan.")
       } else {
-        alert("Gagal daftar dengan Google. Silakan coba lagi.")
+        showError("Gagal Daftar", "Gagal daftar dengan Google. Silakan coba lagi.")
       }
     } finally {
       setGoogleLoading(false)

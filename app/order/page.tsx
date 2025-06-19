@@ -10,8 +10,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { AlertDialog } from "@/components/ui/alert-dialog"
 import { Calendar, Clock, MapPin, Phone, User, Package, Minus, Plus, Trash2, ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/components/auth-provider"
+import { useAlert } from '@/hooks/useAlert'
 
 interface ServiceType {
   id: string
@@ -56,9 +59,14 @@ interface OrderFormData {
 
 export default function OrderPage() {
   const router = useRouter()
+  const { getAuthToken } = useAuth()
   const [loading, setLoading] = useState(false)
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])
   const [itemTypes, setItemTypes] = useState<ItemType[]>([])
+  
+  // Alert hook
+  const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
+  
   const [orderData, setOrderData] = useState<OrderFormData>({
     serviceType: 'kiloan',
     serviceTypeId: '',
@@ -248,12 +256,11 @@ export default function OrderPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    const validationError = validateForm()
+      const validationError = validateForm()
     if (validationError) {
-      alert(validationError)
+      showWarning('Form Tidak Valid', validationError)
       return
-    }    setLoading(true)
+    }setLoading(true)
 
     try {
       // Generate Midtrans order ID first
@@ -275,105 +282,38 @@ export default function OrderPage() {
         contactPhone: orderData.contactPhone,
         notes: orderData.notes,
         transactionId: midtransOrderId
+      }      // Get auth token for order creation
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      }
+      
+      try {
+        const authToken = await getAuthToken()
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`
+        }
+      } catch (error) {
+        console.log('Could not get auth token for order creation:', error)
       }
 
       const createResponse = await fetch('/api/orders/new', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(orderPayload),
       })
 
       const createResult = await createResponse.json()
-      
-      if (!createResult.success) {
+        if (!createResult.success) {
         throw new Error(createResult.message || 'Gagal membuat pesanan')
       }
 
-      // Create payment
-      const paymentPayload = {
-        order_id: midtransOrderId,
-        amount: calculateTotal(),
-        customer_details: {
-          first_name: orderData.contactName,
-          email: "customer@laundry.com", // In real app, get from auth
-          phone: orderData.contactPhone,
-        },
-        item_details: orderData.serviceType === 'kiloan' 
-          ? [{
-              id: "laundry-kiloan",
-              name: serviceTypes.find(s => s.id === orderData.serviceTypeId)?.name || "Laundry Kiloan",
-              price: calculateSubtotal(),
-              quantity: 1,
-            }]
-          : orderData.items.map((item, index) => ({
-              id: `item-${index}`,
-              name: item.itemName,
-              price: item.pricePerItem,
-              quantity: item.quantity,
-            }))
-      }      // Add pickup and delivery fees based on customer selection
-      if (orderData.pickupOption === 'pickup') {
-        paymentPayload.item_details.push({
-          id: "pickup-fee",
-          name: "Biaya Penjemputan",
-          price: pickupFee,
-          quantity: 1,
-        })
-      }
+      console.log('Order created successfully:', createResult.order)
       
-      if (orderData.deliveryOption === 'delivery') {
-        paymentPayload.item_details.push({
-          id: "delivery-fee", 
-          name: "Biaya Pengantaran",
-          price: deliveryFee,
-          quantity: 1,
-        })
-      }
-
-      const paymentResponse = await fetch('/api/payment/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(paymentPayload),
-      })
-
-      const paymentResult = await paymentResponse.json()
-      
-      if (!paymentResult.success) {
-        throw new Error(paymentResult.message || 'Gagal membuat pembayaran')
-      }      // Open Midtrans Snap
-      if (window.snap) {
-        window.snap.pay(paymentResult.token, {
-          onSuccess: function(result: any) {
-            console.log('Payment success:', result)
-            // Redirect to finish page with order details
-            router.push(`/payment/finish?order_id=${midtransOrderId}&transaction_status=settlement&status_code=200`)
-          },
-          onPending: function(result: any) {
-            console.log('Payment pending:', result)
-            // Redirect to finish page with pending status
-            router.push(`/payment/finish?order_id=${midtransOrderId}&transaction_status=pending&status_code=201`)
-          },
-          onError: function(result: any) {
-            console.error('Payment error:', result)
-            // Redirect to error page with error details
-            router.push(`/payment/error?message=${encodeURIComponent(result.status_message || 'Terjadi kesalahan dalam pembayaran')}`)
-          },
-          onClose: function() {
-            // Payment popup closed by user - redirect to unfinish page
-            router.push('/payment/unfinish')
-          }
-        })
-      } else {
-        throw new Error('Midtrans Snap tidak tersedia')
-      }
-
-    } catch (error) {
+      // Redirect to order detail page instead of automatic payment
+      // This allows user to see countdown timer and choose when to pay
+      router.push(`/orders/${createResult.order.id}`)    } catch (error) {
       console.error('Error creating order:', error)
-      alert(error instanceof Error ? error.message : 'Terjadi kesalahan')
+      showError('Gagal Membuat Pesanan', error instanceof Error ? error.message : 'Terjadi kesalahan')
     } finally {
       setLoading(false)
     }
@@ -966,9 +906,21 @@ export default function OrderPage() {
               </div>
             </div>
           </form>
-          </div>
-        </div>
+          </div>        </div>
       </div>
+
+      {/* Custom Alert Dialog */}
+      <AlertDialog
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        confirmText={alertState.confirmText}
+        cancelText={alertState.cancelText}
+        onConfirm={alertState.onConfirm}
+        showCancel={alertState.showCancel}
+      />
     </div>
   )
 }

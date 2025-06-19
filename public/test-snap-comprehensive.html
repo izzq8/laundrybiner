@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Snap Payment - Valid Token</title>
+    <script type="text/javascript" src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key="SB-Mid-client-mNdxM5MY-ItvKEFT"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button { padding: 12px 24px; margin: 10px 5px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn:disabled { background: #6c757d; cursor: not-allowed; }
+        #logs { background: #f8f9fa; border: 1px solid #ddd; padding: 10px; height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Snap Payment - Diagnostik Error</h1>
+        
+        <div id="snapStatus" class="status info">Checking Snap status...</div>
+        
+        <div style="margin: 20px 0;">
+            <button id="generateBtn" onclick="generateToken()" class="btn-success">Generate Token</button>
+            <button id="payBtn" onclick="testPayment()" class="btn-primary" disabled>Test Payment</button>
+            <button onclick="clearLogs()" class="btn-danger">Clear Logs</button>
+        </div>
+        
+        <div id="tokenInfo" style="margin: 20px 0; display: none;">
+            <h3>Token Info:</h3>
+            <p><strong>Token:</strong> <span id="tokenValue"></span></p>
+            <p><strong>Length:</strong> <span id="tokenLength"></span></p>
+            <p><strong>Type:</strong> <span id="tokenType"></span></p>
+        </div>
+        
+        <h3>Debug Logs:</h3>
+        <div id="logs"></div>
+    </div>
+
+    <script>
+        let currentToken = null;
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
+            const logMessage = `[${timestamp}] ${prefix} ${message}`;
+            
+            const logDiv = document.getElementById('logs');
+            logDiv.textContent += logMessage + '\n';
+            logDiv.scrollTop = logDiv.scrollHeight;
+            
+            console.log(logMessage);
+        }
+
+        function updateStatus(message, className) {
+            const statusDiv = document.getElementById('snapStatus');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${className}`;
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').textContent = '';
+        }
+
+        // Check Snap loading
+        function checkSnapStatus() {
+            log('Starting Snap status check...');
+            
+            // Check if window.snap exists
+            if (typeof window.snap !== 'undefined') {
+                log('Snap object found', 'success');
+                
+                // Check snap properties
+                log(`Snap type: ${typeof window.snap}`);
+                log(`Snap keys: ${Object.keys(window.snap)}`);
+                
+                if (typeof window.snap.pay === 'function') {
+                    log('snap.pay method available', 'success');
+                    updateStatus('✅ Snap loaded and ready', 'success');
+                    return true;
+                } else {
+                    log('snap.pay method not found', 'error');
+                    updateStatus('❌ Snap loaded but pay method missing', 'error');
+                    return false;
+                }
+            } else {
+                log('Snap object not found', 'warning');
+                updateStatus('⚠️ Snap not loaded yet', 'info');
+                return false;
+            }
+        }
+
+        // Generate token
+        async function generateToken() {
+            log('Generating payment token...');
+            document.getElementById('generateBtn').disabled = true;
+            
+            const payload = {
+                order_id: 'SNAP-TEST-' + Date.now(),
+                amount: 10000,
+                customer_details: {
+                    first_name: 'Test',
+                    last_name: 'User',
+                    email: 'test@laundry.com',
+                    phone: '+628123456789'
+                },
+                item_details: [{
+                    id: 'test-item',
+                    price: 10000,
+                    quantity: 1,
+                    name: 'Test Laundry Service'
+                }]
+            };
+
+            try {
+                log(`Sending request to /api/payment/create`);
+                log(`Payload: ${JSON.stringify(payload, null, 2)}`);
+
+                const response = await fetch('/api/payment/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                log(`Response status: ${response.status}`);
+                
+                const result = await response.json();
+                log(`Response: ${JSON.stringify(result, null, 2)}`);
+
+                if (result.success && result.token) {
+                    currentToken = result.token;
+                    log(`Token generated successfully: ${currentToken}`, 'success');
+                    
+                    // Show token info
+                    document.getElementById('tokenValue').textContent = currentToken;
+                    document.getElementById('tokenLength').textContent = currentToken.length;
+                    document.getElementById('tokenType').textContent = typeof currentToken;
+                    document.getElementById('tokenInfo').style.display = 'block';
+                    
+                    // Enable pay button if Snap is ready
+                    if (checkSnapStatus()) {
+                        document.getElementById('payBtn').disabled = false;
+                    }
+                } else {
+                    log(`Failed to generate token: ${result.message || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                log(`Error generating token: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('generateBtn').disabled = false;
+            }
+        }
+
+        // Test payment
+        function testPayment() {
+            if (!currentToken) {
+                log('No token available', 'error');
+                return;
+            }
+
+            if (!checkSnapStatus()) {
+                log('Snap not ready', 'error');
+                return;
+            }
+
+            log(`Testing payment with token: ${currentToken}`);
+            
+            try {
+                // Log before calling snap.pay
+                log('Calling window.snap.pay...');
+                
+                window.snap.pay(currentToken, {
+                    onSuccess: function(result) {
+                        log(`Payment SUCCESS: ${JSON.stringify(result, null, 2)}`, 'success');
+                    },
+                    onPending: function(result) {
+                        log(`Payment PENDING: ${JSON.stringify(result, null, 2)}`, 'warning');
+                    },
+                    onError: function(result) {
+                        log(`Payment ERROR: ${JSON.stringify(result, null, 2)}`, 'error');
+                    },
+                    onClose: function() {
+                        log('Payment popup CLOSED', 'warning');
+                    }
+                });
+                
+                log('snap.pay called successfully', 'success');
+                
+            } catch (error) {
+                log(`Error in snap.pay: ${error.message}`, 'error');
+                log(`Error stack: ${error.stack}`, 'error');
+                
+                // Additional debugging
+                log(`Error name: ${error.name}`);
+                log(`Error toString: ${error.toString()}`);
+            }
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', function() {
+            log('Page loaded, checking Snap...');
+            
+            // Check Snap immediately
+            if (!checkSnapStatus()) {
+                // If not ready, check every 500ms for up to 10 seconds
+                let attempts = 0;
+                const maxAttempts = 20;
+                
+                const checkInterval = setInterval(() => {
+                    attempts++;
+                    log(`Snap check attempt ${attempts}/${maxAttempts}`);
+                    
+                    if (checkSnapStatus()) {
+                        clearInterval(checkInterval);
+                        log('Snap ready after waiting', 'success');
+                    } else if (attempts >= maxAttempts) {
+                        clearInterval(checkInterval);
+                        log('Snap failed to load after maximum attempts', 'error');
+                        updateStatus('❌ Snap failed to load', 'error');
+                    }
+                }, 500);
+            }
+        });
+
+        // Also check immediately if already loaded
+        if (document.readyState === 'complete') {
+            checkSnapStatus();
+        }
+    </script>
+</body>
+</html>

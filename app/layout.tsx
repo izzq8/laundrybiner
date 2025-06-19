@@ -4,6 +4,8 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/components/auth-provider"
 import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
+import { AutoPaymentService } from "@/components/auto-payment-service"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -18,8 +20,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  return (
-    <html lang="en" suppressHydrationWarning>
+  return (    <html lang="en" suppressHydrationWarning>
       <head>
         <script
           src="https://app.sandbox.midtrans.com/snap/snap.js"
@@ -27,10 +28,11 @@ export default function RootLayout({
           async
         />
       </head>
-      <body className={inter.className}>
-        <AuthProvider>
-          <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+      <body className={inter.className}>        <AuthProvider>
+          <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
+            <AutoPaymentService enabled={true} intervalMinutes={2} />
             {children}
+            <Toaster />
           </ThemeProvider>
         </AuthProvider>
       </body>

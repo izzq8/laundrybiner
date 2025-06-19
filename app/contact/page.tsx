@@ -10,8 +10,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, MapPin, Phone, Mail, Clock, Send, MessageCircle } from "lucide-react"
+import { useAlert } from "@/hooks/useAlert"
+import { AlertDialog } from "@/components/ui/alert-dialog"
 
 export default function ContactPage() {
+  const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -30,11 +33,9 @@ export default function ContactPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-
-    // Simulate form submission
+    setLoading(true)    // Simulate form submission
     setTimeout(() => {
-      alert("Pesan Anda telah terkirim! Kami akan segera menghubungi Anda.")
+      showSuccess("Pesan Terkirim", "Pesan Anda telah terkirim! Kami akan segera menghubungi Anda.")
       setFormData({
         name: "",
         email: "",
@@ -272,10 +273,17 @@ export default function ContactPage() {
                   </Button>
                 </div>
               </CardContent>
-            </Card>
-          </div>
+            </Card>          </div>
         </div>
       </div>
+
+      <AlertDialog
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+      />
     </div>
   )
 }

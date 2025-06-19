@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Update Payment Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>Update Payment Status</h1>
+    
+    <form id="updateForm">
+        <div class="form-group">
+            <label for="orderId">Order ID:</label>
+            <input type="text" id="orderId" name="orderId" value="fd4a83d6-a5ce-45b2-b563-2951110d1183" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="paymentStatus">Payment Status:</label>
+            <select id="paymentStatus" name="paymentStatus" required>
+                <option value="">Select Payment Status</option>
+                <option value="pending">Pending</option>
+                <option value="settlement" selected>Settlement (Lunas)</option>
+                <option value="paid">Paid</option>
+                <option value="failed">Failed</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="expired">Expired</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="orderStatus">Order Status (optional):</label>
+            <select id="orderStatus" name="orderStatus">
+                <option value="">Select Order Status</option>
+                <option value="pending">Pending</option>
+                <option value="confirmed" selected>Confirmed</option>
+                <option value="picked_up">Picked Up</option>
+                <option value="in_process">In Process</option>
+                <option value="ready">Ready</option>
+                <option value="delivered">Delivered</option>
+                <option value="cancelled">Cancelled</option>
+            </select>
+        </div>
+        
+        <button type="submit">Update Status</button>
+    </form>
+    
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('updateForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = {
+                orderId: formData.get('orderId'),
+                paymentStatus: formData.get('paymentStatus'),
+                orderStatus: formData.get('orderStatus') || undefined
+            };
+            
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Updating...';
+            
+            try {
+                const response = await fetch('/api/orders/update-payment-status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultDiv.innerHTML = `<div class="result success">
+                        <strong>Success!</strong> ${result.message}
+                        <br><br>
+                        <strong>Updated Order:</strong>
+                        <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                    </div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="result error">
+                        <strong>Error:</strong> ${result.message}
+                    </div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error">
+                    <strong>Error:</strong> ${error.message}
+                </div>`;
+            }
+        });
+    </script>
+</body>
+</html>
