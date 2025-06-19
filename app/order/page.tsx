@@ -244,94 +244,19 @@ export default function OrderPage() {
         body: JSON.stringify(orderPayload),
       })
 
-      const createResult = await createResponse.json()
-      
+      const createResult = await createResponse.json()      
       if (!createResult.success) {
         throw new Error(createResult.message || 'Gagal membuat pesanan')
       }
 
-      // Generate Midtrans order ID
-      const midtransOrderId = `LAUNDRY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-      // Create payment
-      const paymentPayload = {
-        order_id: midtransOrderId,
-        amount: calculateTotal(),
-        customer_details: {
-          first_name: orderData.contactName,
-          email: "customer@laundry.com", // In real app, get from auth
-          phone: orderData.contactPhone,
-        },
-        item_details: orderData.serviceType === 'kiloan' 
-          ? [{
-              id: "laundry-kiloan",
-              name: serviceTypes.find(s => s.id === orderData.serviceTypeId)?.name || "Laundry Kiloan",
-              price: calculateSubtotal(),
-              quantity: 1,
-            }]
-          : orderData.items.map((item, index) => ({
-              id: `item-${index}`,
-              name: item.itemName,
-              price: item.pricePerItem,
-              quantity: item.quantity,
-            }))
-      }
-
-      // Add pickup and delivery fees
-      paymentPayload.item_details.push({
-        id: "pickup-fee",
-        name: "Biaya Penjemputan",
-        price: pickupFee,
-        quantity: 1,
-      })
-      
-      paymentPayload.item_details.push({
-        id: "delivery-fee", 
-        name: "Biaya Pengantaran",
-        price: deliveryFee,
-        quantity: 1,
-      })
-
-      const paymentResponse = await fetch('/api/payment/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(paymentPayload),
-      })
-
-      const paymentResult = await paymentResponse.json()
-      
-      if (!paymentResult.success) {
-        throw new Error(paymentResult.message || 'Gagal membuat pembayaran')
-      }      // Open Midtrans Snap
-      if (window.snap) {
-        window.snap.pay(paymentResult.token, {
-          onSuccess: function(result: any) {
-            console.log('Payment success:', result)
-            // Let Midtrans handle the redirect via callbacks in payment API
-            // The redirect will go to /payment/finish automatically
-          },
-          onPending: function(result: any) {
-            console.log('Payment pending:', result)
-            // Let Midtrans handle the redirect via callbacks in payment API
-            // The redirect will go to /payment/finish automatically
-          },
-          onError: function(result: any) {
-            console.error('Payment error:', result)
-            // Redirect to error page with error details
-            router.push(`/payment/error?message=${encodeURIComponent(result.status_message || 'Terjadi kesalahan dalam pembayaran')}`)
-          },
-          onClose: function() {
-            // Payment popup closed by user - redirect to unfinish page
-            router.push('/payment/unfinish')
-          }
-        })
+      // Order created successfully, redirect to order detail page
+      const orderId = createResult.order?.id
+      if (orderId) {
+        router.push(`/orders/${orderId}`)
       } else {
-        throw new Error('Midtrans Snap tidak tersedia')
-      }
-
-    } catch (error) {
+        // Fallback to orders list if no orderId
+        router.push('/orders')
+      }    } catch (error) {
       console.error('Error creating order:', error)
       alert(error instanceof Error ? error.message : 'Terjadi kesalahan')
     } finally {

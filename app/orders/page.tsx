@@ -1,336 +1,404 @@
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Package, Clock, CheckCircle, Truck, History, ArrowLeft } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Calendar, User, Package, Eye, ArrowLeft, CreditCard } from "lucide-react"
+import { CountdownTimer, useCanMakePayment } from "@/components/countdown-timer"
 
 interface Order {
-  id: string;
-  status: string;
-  created_at: string;
-  total_price: number;
-  service_type: string;
-  weight?: number;
-  items?: any[];
-  pickup_date: string;
-  pickup_time: string;
-  pickup_address: string;
-  contact_name: string;
-  contact_phone: string;
+  id: string
+  order_number: string
+  status: string
+  payment_status: string
+  total_amount: number
+  pickup_date: string
+  pickup_time: string
+  customer_name: string
+  customer_phone: string
+  pickup_address: string
+  created_at: string
+  service_types?: {
+    name: string
+    type: string
+  }
+}
+
+// Action buttons component for order cards
+function OrderActionButtons({ 
+  order, 
+  onPayment, 
+  onViewDetail 
+}: { 
+  order: Order; 
+  onPayment: (orderId: string) => void; 
+  onViewDetail: (orderId: string) => void; 
+}) {
+  const canPay = useCanMakePayment(order.created_at, order.payment_status, order.status)
+
+  return (
+    <div className="flex gap-2">
+      {/* Payment Button - Show only if payment can be made */}
+      {canPay && (
+        <Button
+          size="sm"
+          onClick={() => onPayment(order.id)}
+          className="bg-green-600 hover:bg-green-700 text-white"
+        >
+          <CreditCard className="h-4 w-4 mr-1" />
+          Bayar
+        </Button>
+      )}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onViewDetail(order.id)}
+        className="flex items-center gap-2"
+      >
+        <Eye className="h-4 w-4" />
+        Detail
+      </Button>
+    </div>
+  )
 }
 
 export default function OrdersPage() {
-  const router = useRouter();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [activeTab, setActiveTab] = useState("active");
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const router = useRouter()
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active')
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.user) {
-        setUser(data.session.user);
-        fetchOrders(data.session.user.id);
-        
-        // Check if there's a tab query parameter
-        const params = new URLSearchParams(window.location.search);
-        const tabParam = params.get('tab');
-        if (tabParam === 'history') {
-          setActiveTab('history');
+    fetchOrders()
+  }, [])
+
+  const fetchOrders = async () => {
+    try {
+      const response = await fetch('/api/orders')
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setOrders(data.data || [])
+        } else {
+          setError('Gagal memuat pesanan')
         }
       } else {
-        router.push("/auth/signin");
-      }
-    };
-    
-    checkUser();
-  }, [router]);
-
-  // Debug orders state
-  useEffect(() => {
-    if (orders.length > 0) {
-      console.log("Orders loaded:", orders.length);
-      console.log("Sample order status:", orders[0].status);
-    }
-  }, [orders]);
-
-  const fetchOrders = async (userId: string) => {
-    setLoading(true);
-    try {
-      // Get all orders for the user
-      const { data: ordersData, error: ordersError } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-      
-      if (ordersError) throw ordersError;
-      
-      if (ordersData && ordersData.length > 0) {
-        // Fetch the latest tracking status for each order
-        const ordersWithStatus = await Promise.all(
-          ordersData.map(async (order) => {
-            // Get the latest status from order_tracking
-            const { data: trackingData, error: trackingError } = await supabase
-              .from('order_tracking')
-              .select('*')
-              .eq('order_id', order.id)
-              .order('created_at', { ascending: false })
-              .limit(1);
-            
-            if (!trackingError && trackingData && trackingData.length > 0) {
-              // Update the order status with the latest tracking status
-              return {
-                ...order,
-                status: trackingData[0].status
-              };
-            }
-            
-            return order;
-          })
-        );
-        
-        setOrders(ordersWithStatus || []);
-      } else {
-        setOrders([]);
+        setError('Gagal memuat pesanan')
       }
     } catch (error) {
-      console.error('Error fetching orders:', error);
-      setOrders([]);
+      console.error('Error fetching orders:', error)
+      setError('Gagal memuat pesanan')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase() || '') {
-      case 'pending':
-      case 'menunggu pembayaran':
-        return 'bg-yellow-500';
-      case 'processing':
-      case 'confirmed':
-      case 'in_progress':
-      case 'sedang diproses':
-        return 'bg-blue-500';
-      case 'pickup':
-      case 'picked_up':
-      case 'menunggu pickup':
-        return 'bg-purple-500';
-      case 'ready':
-      case 'delivery':
-      case 'dalam pengiriman':
-        return 'bg-indigo-500';
-      case 'completed':
-      case 'delivered':
-      case 'selesai':
-        return 'bg-green-500';
-      case 'cancelled':
-        return 'bg-red-500';
-      default:
-        return 'bg-gray-500';
-    }
-  };
-  const getStatusIcon = (status: string) => {
-    switch (status?.toLowerCase() || '') {
-      case 'pending':
-      case 'menunggu pembayaran':
-        return <Clock className="w-4 h-4" />;
-      case 'processing':
-      case 'confirmed':
-      case 'in_progress':
-      case 'sedang diproses':
-        return <Package className="w-4 h-4" />;
-      case 'pickup':
-      case 'picked_up':
-      case 'menunggu pickup':
-        return <Clock className="w-4 h-4" />;
-      case 'ready':
-      case 'delivery':
-      case 'dalam pengiriman':
-        return <Truck className="w-4 h-4" />;
-      case 'completed':
-      case 'delivered':
-      case 'selesai':
-        return <CheckCircle className="w-4 h-4" />;
-      default:
-        return <Clock className="w-4 h-4" />;
-    }
-  };
+  }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    }).format(date);
-  };
-  const activeStatuses = [
-    'pending', 'menunggu pembayaran', 
-    'processing', 'confirmed', 'in_progress', 'sedang diproses',
-    'pickup', 'picked_up', 'menunggu pickup',
-    'ready', 'delivery', 'dalam pengiriman'
-  ];
-  
-  const completedStatuses = ['completed', 'delivered', 'selesai'];
-  
-  const activeOrders = orders.filter(order => 
-    order.status && activeStatuses.includes(order.status.toLowerCase())
-  );
-  
-  const completedOrders = orders.filter(order => 
-    order.status && completedStatuses.includes(order.status.toLowerCase())
-  );
+  const getStatusBadge = (status: string) => {
+    const statusConfig = {
+      pending: { label: 'Menunggu', variant: 'secondary' as const },
+      confirmed: { label: 'Dikonfirmasi', variant: 'default' as const },
+      picked_up: { label: 'Dijemput', variant: 'default' as const },
+      in_process: { label: 'Diproses', variant: 'default' as const },
+      ready: { label: 'Siap', variant: 'default' as const },
+      delivered: { label: 'Diantar', variant: 'default' as const },
+      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const },
+    }
+
+    return statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'secondary' as const }
+  }
+
+  const getPaymentStatusBadge = (paymentStatus: string) => {
+    const statusConfig = {
+      pending: { label: 'Menunggu', variant: 'secondary' as const },
+      paid: { label: 'Lunas', variant: 'default' as const },
+      failed: { label: 'Gagal', variant: 'destructive' as const },
+      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const },
+      expired: { label: 'Kedaluwarsa', variant: 'destructive' as const },
+    }
+
+    return statusConfig[paymentStatus as keyof typeof statusConfig] || { label: paymentStatus, variant: 'secondary' as const }
+  }
+
+  const handleViewOrder = (orderId: string) => {
+    router.push(`/orders/${orderId}`)
+  }
+
+  const handlePayment = async (orderId: string) => {
+    try {
+      const order = orders.find(o => o.id === orderId)
+      if (!order) return      // Generate unique order_id by appending timestamp to avoid "order_id already taken" error
+      const uniqueOrderId = `${order.order_number}-${Date.now()}`
+
+      const response = await fetch('/api/payment/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          order_id: uniqueOrderId,
+          amount: order.total_amount,
+          customer_details: {
+            first_name: order.customer_name,
+            phone: order.customer_phone,
+          },
+          item_details: [
+            {
+              id: order.service_types?.type || 'laundry-service',
+              name: order.service_types?.name || 'Layanan Laundry',
+              price: order.total_amount,
+              quantity: 1,
+            }
+          ],
+        }),
+      })
+
+      const data = await response.json()
+      
+      if (data.success && data.payment_url) {
+        // Redirect to Midtrans payment page
+        window.location.href = data.payment_url
+      } else {
+        alert('Gagal membuat pembayaran: ' + (data.message || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Payment error:', error)
+      alert('Gagal membuat pembayaran')
+    }
+  }
+
+  const handleBackToHome = () => {
+    router.push('/')
+  }
+
+  const handleNewOrder = () => {
+    router.push('/order')
+  }
+
+  // Filter orders based on active tab
+  const getFilteredOrders = () => {
+    if (activeTab === 'active') {
+      return orders.filter(order =>
+        order.status !== 'delivered' &&
+        order.status !== 'cancelled' &&
+        order.payment_status !== 'failed' &&
+        order.payment_status !== 'expired'
+      )
+    } else {
+      return orders.filter(order =>
+        order.status === 'delivered' ||
+        order.status === 'cancelled' ||
+        order.payment_status === 'failed' ||
+        order.payment_status === 'expired'
+      )
+    }
+  }
+
+  // Get counts for tabs
+  const getActiveOrdersCount = () => {
+    return orders.filter(order =>
+      order.status !== 'delivered' &&
+      order.status !== 'cancelled' &&
+      order.payment_status !== 'failed' &&
+      order.payment_status !== 'expired'
+    ).length
+  }
+
+  const getHistoryOrdersCount = () => {
+    return orders.filter(order =>
+      order.status === 'delivered' ||
+      order.status === 'cancelled' ||
+      order.payment_status === 'failed' ||
+      order.payment_status === 'expired'
+    ).length
+  }
+
+  const filteredOrders = getFilteredOrders()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Memuat pesanan...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-8 text-center">
+            <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Error</h1>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <Button onClick={handleBackToHome} className="w-full">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Kembali ke Beranda
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 pb-16">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="sm" onClick={() => router.back()}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Kembali
-            </Button>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">Pesanan Saya</h1>
+    <div className="min-h-screen bg-gray-50">
+      <div className="bg-white border-b">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto">
+            {/* Header */}
+            <div className="flex items-center py-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBackToHome}
+                className="mr-3 p-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <h1 className="text-xl font-semibold text-gray-900">Pesanan Saya</h1>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b">
+              <button
+                onClick={() => setActiveTab('active')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'active'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Status Order ({loading ? '...' : getActiveOrdersCount()})
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'history'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Riwayat ({loading ? '...' : getHistoryOrdersCount()})
+              </button>
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      <div className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="active" className="w-full" onValueChange={setActiveTab}>
-          <TabsList className="grid grid-cols-2 mb-8">
-            <TabsTrigger value="active" className="text-sm">
-              Status Order ({activeOrders.length})
-            </TabsTrigger>
-            <TabsTrigger value="history" className="text-sm">
-              Riwayat ({completedOrders.length})
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="active">
-            {loading ? (
-              <div className="flex justify-center items-center py-20">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-              </div>
-            ) : activeOrders.length > 0 ? (
-              <div className="space-y-4">
-                {activeOrders.map((order) => (
-                  <Link href={`/order-status/${order.id}`} key={order.id}>
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-4">
-                            <div
-                              className={`w-10 h-10 ${getStatusColor(order.status)} rounded-lg flex items-center justify-center text-white`}
-                            >
-                              {getStatusIcon(order.status)}
-                            </div>
-                            <div>
-                              <h4 className="font-semibold text-gray-900">Order #{order.id.substring(0, 8)}</h4>
-                              <p className="text-sm text-gray-500">{formatDate(order.created_at)}</p>
-                            </div>
-                          </div>
-                          <Badge variant="secondary">{order.status}</Badge>
-                        </div>
-                        <div className="flex justify-between mt-4">
-                          <div className="text-sm text-gray-600">
-                            <p>{order.service_type} {order.weight ? `(${order.weight} kg)` : ''}</p>
-                            <p>Pickup: {order.pickup_date} {order.pickup_time}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-medium text-gray-900">
-                              Rp {order.total_price?.toLocaleString('id-ID')}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))}
+      <div className="py-6">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto">
+            {/* Orders Content */}
+            {filteredOrders.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="mb-6">
+                  <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                  <h2 className="text-lg font-medium text-gray-900 mb-2">
+                    {activeTab === 'active' ? 'Belum ada pesanan aktif' : 'Belum ada riwayat pesanan'}
+                  </h2>
+                  <p className="text-gray-500 text-sm">
+                    {activeTab === 'active'
+                      ? 'Buat pesanan laundry baru sekarang'
+                      : 'Riwayat pesanan yang sudah selesai akan muncul di sini'
+                    }
+                  </p>
+                </div>
+                {activeTab === 'active' && (
+                  <Button
+                    onClick={handleNewOrder}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg"
+                  >
+                    Buat Order Baru
+                  </Button>
+                )}
               </div>
             ) : (
-              <Card>
-                <CardContent className="text-center py-12">
-                  <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Belum ada pesanan aktif</h3>
-                  <p className="text-gray-600 mb-6">Buat pesanan laundry baru sekarang</p>
-                  <Link href="/order">
-                    <Button className="bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white">
-                      Buat Order Baru
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="history">
-            {loading ? (
-              <div className="flex justify-center items-center py-20">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-              </div>
-            ) : completedOrders.length > 0 ? (
               <div className="space-y-4">
-                {completedOrders.map((order) => (
-                  <Link href={`/order-status/${order.id}`} key={order.id}>
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center text-white">
-                              <CheckCircle className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <h4 className="font-semibold text-gray-900">Order #{order.id.substring(0, 8)}</h4>
-                              <p className="text-sm text-gray-500">{formatDate(order.created_at)}</p>
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                            {order.status}
-                          </Badge>
+                {filteredOrders.map((order) => (
+                  <Card key={order.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-lg">{order.order_number}</CardTitle>
+                          <p className="text-sm text-gray-600">
+                            {new Date(order.created_at).toLocaleDateString('id-ID', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
                         </div>
-                        <div className="flex justify-between mt-4">
-                          <div className="text-sm text-gray-600">
-                            <p>{order.service_type} {order.weight ? `(${order.weight} kg)` : ''}</p>
-                            <p>Selesai: {formatDate(order.created_at)}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-medium text-gray-900">
-                              Rp {order.total_price?.toLocaleString('id-ID')}
-                            </p>
+                        <div className="text-right">
+                          <p className="text-2xl font-bold text-green-600">
+                            Rp {order.total_amount.toLocaleString()}
+                          </p>
+                          <div className="flex gap-2 mt-2">
+                            <Badge {...getStatusBadge(order.status)}>
+                              {getStatusBadge(order.status).label}
+                            </Badge>
+                            <Badge {...getPaymentStatusBadge(order.payment_status)}>
+                              {getPaymentStatusBadge(order.payment_status).label}
+                            </Badge>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
+                      </div>
+                    </CardHeader>                    <CardContent>
+                      {/* Countdown Timer for pending payments */}
+                      {order.payment_status === 'pending' && (
+                        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <CreditCard className="h-4 w-4 text-amber-600" />
+                              <span className="text-sm font-medium text-amber-800">
+                                Menunggu Pembayaran
+                              </span>
+                            </div>
+                            <CountdownTimer 
+                              createdAt={order.created_at} 
+                              compact={true}
+                              className="text-amber-700"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="flex items-center space-x-2">
+                            <Package className="h-4 w-4 text-gray-400" />
+                            <span className="text-sm text-gray-600">{order.service_types?.name || 'N/A'}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <User className="h-4 w-4 text-gray-400" />
+                            <span className="text-sm text-gray-600">{order.customer_name}</span>
+                          </div>
+                          {order.pickup_date && (
+                            <div className="flex items-center space-x-2">
+                              <Calendar className="h-4 w-4 text-gray-400" />
+                              <span className="text-sm text-gray-600">
+                                {new Date(order.pickup_date).toLocaleDateString('id-ID')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <OrderActionButtons order={order} onPayment={handlePayment} onViewDetail={handleViewOrder} />
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
-            ) : (
-              <Card>
-                <CardContent className="text-center py-12">
-                  <History className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Belum ada riwayat pesanan</h3>
-                  <p className="text-gray-600 mb-6">Riwayat pesanan yang telah selesai akan muncul di sini</p>
-                  <Link href="/order">
-                    <Button className="bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white">
-                      Buat Order Baru
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
             )}
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
       </div>
     </div>
-  );
+  )
 }

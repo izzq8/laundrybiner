@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug QRIS Payment</title>
+    <script
+        type="text/javascript"
+        src="https://app.sandbox.midtrans.com/snap/snap.js"
+        data-client-key="SB-Mid-client-mNdxM5MY-ItvKEFT">
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            border: 1px solid #ddd;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐛 Debug QRIS Payment Issue</h1>
+    
+    <div class="test-section">
+        <h3>1. Test Simple Payment Payload</h3>
+        <button onclick="testSimplePayment()">Test Simple Payment</button>
+        <button onclick="testMinimalPayload()">Test Minimal Payload</button>
+        <div id="simpleResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>2. Custom Payment Test</h3>
+        <textarea id="customPayload" placeholder="Enter custom JSON payload here...">
+{
+  "order_id": "TEST-SIMPLE-123",
+  "amount": 10000,
+  "customer_details": {
+    "first_name": "Test",
+    "email": "test@example.com",
+    "phone": "08123456789"
+  },
+  "item_details": [
+    {
+      "id": "test-item",
+      "name": "Test Item",
+      "price": 10000,
+      "quantity": 1
+    }
+  ]
+}
+        </textarea>
+        <br>
+        <button onclick="testCustomPayload()">Test Custom Payload</button>
+        <div id="customResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>3. Debug Logs</h3>
+        <div id="debugLogs"></div>
+    </div>
+
+    <script>
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `status ${type}`;
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            document.getElementById('debugLogs').appendChild(logEntry);
+        }
+
+        async function testPayment(payload, resultElementId) {
+            const resultDiv = document.getElementById(resultElementId);
+            resultDiv.innerHTML = '<div class="status warning">Testing...</div>';
+            
+            addLog(`Testing payment with order_id: ${payload.order_id}`);
+            
+            try {
+                const response = await fetch('/api/payment/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                addLog(`Response status: ${response.status}`);
+                addLog(`Response success: ${result.success}`);
+                
+                if (result.success && result.token) {
+                    resultDiv.innerHTML = `
+                        <div class="status success">
+                            ✅ Payment created successfully!<br>
+                            Token: ${result.token.substring(0, 30)}...<br>
+                            <button onclick="openSnap('${result.token}')">Open Snap Payment</button>
+                        </div>
+                    `;
+                    addLog(`Token generated: ${result.token.substring(0, 20)}...`, 'success');
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="status error">
+                            ❌ Payment failed: ${result.message}<br>
+                            <pre>${JSON.stringify(result.error_details, null, 2)}</pre>
+                        </div>
+                    `;
+                    addLog(`Payment failed: ${result.message}`, 'error');
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="status error">
+                        ❌ Request failed: ${error.message}
+                    </div>
+                `;
+                addLog(`Request failed: ${error.message}`, 'error');
+            }
+        }
+
+        function testSimplePayment() {
+            const payload = {
+                order_id: `TEST-SIMPLE-${Date.now()}`,
+                amount: 15000,
+                customer_details: {
+                    first_name: "John Doe",
+                    email: "john@example.com",
+                    phone: "08123456789"
+                },
+                item_details: [
+                    {
+                        id: "test-laundry",
+                        name: "Test Laundry Service",
+                        price: 15000,
+                        quantity: 1
+                    }
+                ]
+            };
+            
+            testPayment(payload, 'simpleResult');
+        }
+
+        function testMinimalPayload() {
+            const payload = {
+                order_id: `TEST-MIN-${Date.now()}`,
+                amount: 5000,
+                customer_details: {
+                    first_name: "Test",
+                    email: "test@test.com",
+                    phone: "081234567890"
+                },
+                item_details: [
+                    {
+                        id: "min-item",
+                        name: "Minimal Item",
+                        price: 5000,
+                        quantity: 1
+                    }
+                ]
+            };
+            
+            testPayment(payload, 'simpleResult');
+        }
+
+        function testCustomPayload() {
+            try {
+                const customPayload = JSON.parse(document.getElementById('customPayload').value);
+                testPayment(customPayload, 'customResult');
+            } catch (error) {
+                document.getElementById('customResult').innerHTML = `
+                    <div class="status error">
+                        ❌ Invalid JSON: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function openSnap(token) {
+            if (!window.snap) {
+                addLog('Snap not loaded!', 'error');
+                return;
+            }
+            
+            addLog(`Opening Snap with token: ${token.substring(0, 20)}...`);
+            
+            window.snap.pay(token, {
+                onSuccess: function(result) {
+                    addLog('Payment success: ' + JSON.stringify(result), 'success');
+                },
+                onPending: function(result) {
+                    addLog('Payment pending: ' + JSON.stringify(result), 'warning');
+                },
+                onError: function(result) {
+                    addLog('Payment error: ' + JSON.stringify(result), 'error');
+                },
+                onClose: function() {
+                    addLog('Payment popup closed', 'warning');
+                }
+            });
+        }
+
+        // Initialize
+        addLog('Debug page loaded');
+        setTimeout(() => {
+            if (window.snap) {
+                addLog('Midtrans Snap loaded successfully', 'success');
+            } else {
+                addLog('Midtrans Snap not loaded', 'error');
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

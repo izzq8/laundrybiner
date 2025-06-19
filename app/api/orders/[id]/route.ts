@@ -13,19 +13,16 @@ export async function GET(
         success: false,
         message: "Order ID is required"
       }, { status: 400 })
-    }
-
-    // Fetch order with items
+    }    // Fetch order with service type information
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
       .select(`
         *,
-        order_items (
-          id,
-          item_name,
-          quantity,
-          price_per_item,
-          total_price
+        service_types (
+          name,
+          type,
+          price,
+          description
         )
       `)
       .eq("id", orderId)

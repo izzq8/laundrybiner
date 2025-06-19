@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
       pickupTime,
       contactName,
       contactPhone,
-      notes
+      notes,
+      transactionId
     } = body
 
     // Validate required fields
@@ -65,9 +66,7 @@ export async function POST(request: NextRequest) {
     console.log('Calculated total amount:', totalAmount)
 
     // Use demo user ID
-    const demoUserId = '550e8400-e29b-41d4-a716-446655440000'
-
-    // Prepare order data
+    const demoUserId = '550e8400-e29b-41d4-a716-446655440000'    // Prepare order data
     const orderData = {
       user_id: demoUserId,
       service_type_id: serviceTypeId,
@@ -81,7 +80,8 @@ export async function POST(request: NextRequest) {
       pickup_address: pickupAddress,
       notes: notes || null,
       status: 'pending',
-      payment_status: 'pending'
+      payment_status: 'pending',
+      midtrans_transaction_id: transactionId || null
     }
 
     console.log('Order data to insert:', JSON.stringify(orderData, null, 2))
