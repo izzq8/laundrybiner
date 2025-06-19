@@ -56,31 +56,30 @@ export default function OrdersPage() {
       setLoading(false)
     }
   }
-
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      pending: { label: 'Menunggu', variant: 'secondary' as const },
-      confirmed: { label: 'Dikonfirmasi', variant: 'default' as const },
-      picked_up: { label: 'Dijemput', variant: 'default' as const },
-      in_process: { label: 'Diproses', variant: 'default' as const },
-      ready: { label: 'Siap', variant: 'default' as const },
-      delivered: { label: 'Diantar', variant: 'default' as const },
-      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const },
+      pending: { label: 'Menunggu', variant: 'secondary' as const, className: 'bg-yellow-100 text-yellow-800' },
+      confirmed: { label: 'Dikonfirmasi', variant: 'default' as const, className: 'bg-[#0F4C75] text-white' },
+      picked_up: { label: 'Dijemput', variant: 'default' as const, className: 'bg-blue-100 text-blue-800' },
+      in_process: { label: 'Diproses', variant: 'default' as const, className: 'bg-orange-100 text-orange-800' },
+      ready: { label: 'Siap', variant: 'default' as const, className: 'bg-green-100 text-green-800' },
+      delivered: { label: 'Diantar', variant: 'default' as const, className: 'bg-green-500 text-white' },
+      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, className: 'bg-red-100 text-red-800' },
     }
     
-    return statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'secondary' as const }
+    return statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'secondary' as const, className: 'bg-gray-100 text-gray-800' }
   }
-
   const getPaymentStatusBadge = (paymentStatus: string) => {
     const statusConfig = {
-      pending: { label: 'Menunggu', variant: 'secondary' as const },
-      paid: { label: 'Lunas', variant: 'default' as const },
-      failed: { label: 'Gagal', variant: 'destructive' as const },
-      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const },
-      expired: { label: 'Kedaluwarsa', variant: 'destructive' as const },
+      pending: { label: 'Menunggu', variant: 'secondary' as const, className: 'bg-yellow-100 text-yellow-800' },
+      paid: { label: 'Lunas', variant: 'default' as const, className: 'bg-green-500 text-white' },
+      settlement: { label: 'Lunas', variant: 'default' as const, className: 'bg-green-500 text-white' },
+      failed: { label: 'Gagal', variant: 'destructive' as const, className: 'bg-red-100 text-red-800' },
+      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, className: 'bg-red-100 text-red-800' },
+      expired: { label: 'Kedaluwarsa', variant: 'destructive' as const, className: 'bg-red-100 text-red-800' },
     }
     
-    return statusConfig[paymentStatus as keyof typeof statusConfig] || { label: paymentStatus, variant: 'secondary' as const }
+    return statusConfig[paymentStatus as keyof typeof statusConfig] || { label: paymentStatus, variant: 'secondary' as const, className: 'bg-gray-100 text-gray-800' }
   }
   const handleViewOrder = (orderId: string) => {
     router.push(`/orders/${orderId}`)
@@ -132,11 +131,10 @@ export default function OrdersPage() {
 
   const filteredOrders = getFilteredOrders()
 
-  if (loading) {
-    return (
+  if (loading) {    return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0F4C75] mx-auto mb-4"></div>
           <p className="text-gray-600">Memuat pesanan...</p>
         </div>
       </div>
@@ -150,8 +148,7 @@ export default function OrdersPage() {
           <CardContent className="p-8 text-center">
             <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Error</h1>
-            <p className="text-gray-600 mb-6">{error}</p>
-            <Button onClick={handleBackToHome} className="w-full">
+            <p className="text-gray-600 mb-6">{error}</p>            <Button onClick={handleBackToHome} className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Kembali ke Beranda
             </Button>
@@ -159,14 +156,13 @@ export default function OrdersPage() {
         </Card>
       </div>
     )
-  }
-  return (
+  }  return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
             {/* Header */}
-            <div className="flex items-center py-4">
+            <div className="flex items-center py-6">
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -175,14 +171,16 @@ export default function OrdersPage() {
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <h1 className="text-xl font-semibold text-gray-900">Pesanan Saya</h1>
-            </div>            {/* Tabs */}
+              <h1 className="text-2xl font-bold text-gray-900">Pesanan Saya</h1>
+            </div>
+
+            {/* Tabs */}
             <div className="flex border-b">
               <button
                 onClick={() => setActiveTab('active')}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'active'
-                    ? 'border-blue-600 text-blue-600'
+                    ? 'border-[#0F4C75] text-[#0F4C75]'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -192,7 +190,7 @@ export default function OrdersPage() {
                 onClick={() => setActiveTab('history')}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'history'
-                    ? 'border-blue-600 text-blue-600'
+                    ? 'border-[#0F4C75] text-[#0F4C75]'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -221,23 +219,21 @@ export default function OrdersPage() {
                     }
                   </p>
                 </div>
-                {activeTab === 'active' && (
-                  <Button 
+                {activeTab === 'active' && (                  <Button 
                     onClick={handleNewOrder}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg"
+                    className="bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white px-6 py-2 rounded-lg"
                   >
                     Buat Order Baru
                   </Button>
                 )}
               </div>
             ) : (
-              <div className="space-y-4">
-                {filteredOrders.map((order) => (
-                  <Card key={order.id} className="hover:shadow-md transition-shadow">
+              <div className="space-y-4">                {filteredOrders.map((order) => (
+                  <Card key={order.id} className="hover:shadow-lg transition-shadow border-gray-200">
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <div>
-                          <CardTitle className="text-lg">{order.order_number}</CardTitle>
+                          <CardTitle className="text-lg text-gray-900">{order.order_number}</CardTitle>
                           <p className="text-sm text-gray-600">
                             {new Date(order.created_at).toLocaleDateString('id-ID', {
                               year: 'numeric',
@@ -247,16 +243,15 @@ export default function OrdersPage() {
                               minute: '2-digit'
                             })}
                           </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold text-green-600">
+                        </div>                        <div className="text-right">
+                          <p className="text-2xl font-bold text-[#0F4C75]">
                             Rp {order.total_amount.toLocaleString()}
                           </p>
                           <div className="flex gap-2 mt-2">
-                            <Badge {...getStatusBadge(order.status)}>
+                            <Badge className={getStatusBadge(order.status).className}>
                               {getStatusBadge(order.status).label}
                             </Badge>
-                            <Badge {...getPaymentStatusBadge(order.payment_status)}>
+                            <Badge className={getPaymentStatusBadge(order.payment_status).className}>
                               {getPaymentStatusBadge(order.payment_status).label}
                             </Badge>
                           </div>
@@ -281,20 +276,18 @@ export default function OrdersPage() {
                               </span>
                             </div>
                           )}
-                        </div>
-                        <Button
+                        </div>                        <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleViewOrder(order.id)}
-                          className="flex items-center gap-2"
+                          className="flex items-center gap-2 border-[#0F4C75] text-[#0F4C75] hover:bg-[#0F4C75] hover:text-white"
                         >
                           <Eye className="h-4 w-4" />
                           Detail
                         </Button>
                       </div>
                     </CardContent>
-                  </Card>
-                ))}
+                  </Card>                ))}
               </div>
             )}
           </div>

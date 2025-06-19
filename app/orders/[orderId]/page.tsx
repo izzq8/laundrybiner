@@ -68,27 +68,25 @@ export default function OrderDetailPage() {
       setLoading(false)
     }
   }
-
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       pending: { label: 'Menunggu', variant: 'secondary' as const, color: 'bg-yellow-100 text-yellow-800' },
-      confirmed: { label: 'Dikonfirmasi', variant: 'default' as const, color: 'bg-blue-100 text-blue-800' },
-      picked_up: { label: 'Dijemput', variant: 'default' as const, color: 'bg-purple-100 text-purple-800' },
+      confirmed: { label: 'Dikonfirmasi', variant: 'default' as const, color: 'bg-[#0F4C75] text-white' },
+      picked_up: { label: 'Dijemput', variant: 'default' as const, color: 'bg-blue-100 text-blue-800' },
       in_process: { label: 'Diproses', variant: 'default' as const, color: 'bg-orange-100 text-orange-800' },
       ready: { label: 'Siap', variant: 'default' as const, color: 'bg-green-100 text-green-800' },
-      delivered: { label: 'Diantar', variant: 'default' as const, color: 'bg-green-100 text-green-800' },
+      delivered: { label: 'Diantar', variant: 'default' as const, color: 'bg-green-500 text-white' },
       cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
     }
     
     const config = statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'secondary' as const, color: 'bg-gray-100 text-gray-800' }
     return config
   }
-
   const getPaymentStatusBadge = (paymentStatus: string) => {
     const statusConfig = {
       pending: { label: 'Menunggu', variant: 'secondary' as const, color: 'bg-yellow-100 text-yellow-800' },
-      paid: { label: 'Lunas', variant: 'default' as const, color: 'bg-green-100 text-green-800' },
-      settlement: { label: 'Lunas', variant: 'default' as const, color: 'bg-green-100 text-green-800' },
+      paid: { label: 'Lunas', variant: 'default' as const, color: 'bg-green-500 text-white' },
+      settlement: { label: 'Lunas', variant: 'default' as const, color: 'bg-green-500 text-white' },
       failed: { label: 'Gagal', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
       cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
       expired: { label: 'Kedaluwarsa', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
@@ -117,11 +115,10 @@ export default function OrderDetailPage() {
     }))
   }
 
-  if (loading) {
-    return (
+  if (loading) {    return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0F4C75] mx-auto mb-4"></div>
           <p className="text-gray-600">Memuat detail pesanan...</p>
         </div>
       </div>
@@ -139,23 +136,20 @@ export default function OrderDetailPage() {
             </h1>
             <p className="text-gray-600 mb-6">
               {error || 'Pesanan yang Anda cari tidak ditemukan.'}
-            </p>
-            <Button onClick={() => router.push('/orders')}>
+            </p>            <Button onClick={() => router.push('/orders')}>
               Kembali ke Pesanan
             </Button>
           </CardContent>
         </Card>
       </div>
     )
-  }
-
-  return (
+  }  return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4">
           <div className="max-w-6xl mx-auto">
-            <div className="flex items-center justify-between py-4">
+            <div className="flex items-center justify-between py-6">
               <div className="flex items-center">
                 <Button 
                   variant="ghost" 
@@ -166,17 +160,9 @@ export default function OrderDetailPage() {
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <div>
-                  <h1 className="text-xl font-semibold text-gray-900">Detail Pesanan</h1>
-                  <p className="text-sm text-gray-600">#{order.order_number}</p>
+                  <h1 className="text-2xl font-bold text-gray-900">Detail Pesanan</h1>
+                  <p className="text-sm text-gray-600">#{order?.order_number}</p>
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Badge className={getStatusBadge(order.status).color}>
-                  {getStatusBadge(order.status).label}
-                </Badge>
-                <Badge className={getPaymentStatusBadge(order.payment_status).color}>
-                  {getPaymentStatusBadge(order.payment_status).label}
-                </Badge>
               </div>
             </div>
           </div>
@@ -190,11 +176,10 @@ export default function OrderDetailPage() {
               
               {/* Main Content */}
               <div className="lg:col-span-2 space-y-6">
-                
-                {/* Order Progress */}
-                <Card>
+                  {/* Order Progress */}
+                <Card className="border-gray-200 shadow-sm">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-gray-900">
                       <Package className="h-5 w-5" />
                       Status Pesanan
                     </CardTitle>
@@ -205,19 +190,17 @@ export default function OrderDetailPage() {
                         const Icon = step.icon
                         return (
                           <div
-                            key={step.key}
-                            className={`flex items-start space-x-4 p-4 rounded-lg border ${
+                            key={step.key}                            className={`flex items-start space-x-4 p-4 rounded-lg border ${
                               step.active
-                                ? 'bg-blue-50 border-blue-200'
+                                ? 'bg-[#0F4C75]/5 border-[#0F4C75]/20'
                                 : step.completed
                                 ? 'bg-green-50 border-green-200'
                                 : 'bg-gray-50 border-gray-200'
                             }`}
                           >
-                            <div
-                              className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                            <div                              className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
                                 step.active
-                                  ? 'bg-blue-500 text-white'
+                                  ? 'bg-[#0F4C75] text-white'
                                   : step.completed
                                   ? 'bg-green-500 text-white'
                                   : 'bg-gray-300 text-gray-600'
@@ -242,12 +225,10 @@ export default function OrderDetailPage() {
                       })}
                     </div>
                   </CardContent>
-                </Card>
-
-                {/* Service Details */}
-                <Card>
+                </Card>                {/* Service Details */}
+                <Card className="border-gray-200 shadow-sm">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-gray-900">
                       <Receipt className="h-5 w-5" />
                       Detail Layanan
                     </CardTitle>
@@ -270,21 +251,18 @@ export default function OrderDetailPage() {
                               Estimasi Berat: {order.weight} kg
                             </p>
                           )}
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold text-green-600">
+                        </div>                        <div className="text-right">
+                          <p className="text-2xl font-bold text-[#0F4C75]">
                             Rp {order.total_amount.toLocaleString()}
                           </p>
                           <p className="text-sm text-gray-600">Total</p>
-                        </div>                      </div>
+                        </div></div>
                     </div>
                   </CardContent>
-                </Card>
-
-                {/* Customer Information */}
-                <Card>
+                </Card>                {/* Customer Information */}
+                <Card className="border-gray-200 shadow-sm">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-gray-900">
                       <User className="h-5 w-5" />
                       Informasi Pelanggan
                     </CardTitle>
@@ -353,13 +331,11 @@ export default function OrderDetailPage() {
                     )}
                   </CardContent>
                 </Card>
-              </div>
-
-              {/* Sidebar */}
+              </div>              {/* Sidebar */}
               <div className="lg:col-span-1">
-                <Card className="sticky top-4">
+                <Card className="sticky top-4 border-gray-200 shadow-sm">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-gray-900">
                       <CreditCard className="h-5 w-5" />
                       Ringkasan Pembayaran
                     </CardTitle>
@@ -395,10 +371,9 @@ export default function OrderDetailPage() {
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Biaya Admin</span>
                           <span>Rp 0</span>
-                        </div>
-                        <div className="flex justify-between items-center font-bold text-lg border-t pt-2">
+                        </div>                        <div className="flex justify-between items-center font-bold text-lg border-t pt-2">
                           <span>Total Pembayaran</span>
-                          <span className="text-green-600">Rp {order.total_amount.toLocaleString()}</span>
+                          <span className="text-[#0F4C75]">Rp {order.total_amount.toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
@@ -414,9 +389,7 @@ export default function OrderDetailPage() {
                           minute: '2-digit'
                         })}
                       </p>
-                    </div>
-
-                    <div className="space-y-2 pt-4">
+                    </div>                    <div className="space-y-2 pt-4">
                       <Button
                         onClick={() => router.push('/orders')}
                         className="w-full"
@@ -426,14 +399,13 @@ export default function OrderDetailPage() {
                       </Button>
                       <Button
                         onClick={() => router.push('/')}
-                        className="w-full"
+                        className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white"
                       >
                         Beranda
                       </Button>
                     </div>
                   </CardContent>
-                </Card>
-              </div>
+                </Card>              </div>
             </div>
           </div>
         </div>
