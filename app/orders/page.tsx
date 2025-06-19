@@ -143,12 +143,12 @@ export default function OrdersPage() {
       ready: { 
         label: hasDelivery ? 'Siap Diantar' : 'Siap Diambil', 
         variant: 'default' as const 
-      },
-      delivered: { 
+      },      delivered: { 
         label: hasDelivery ? 'Diantar' : 'Diambil', 
         variant: 'default' as const 
       },
       cancelled: { label: 'Dibatalkan', variant: 'destructive' as const },
+      pending_cancellation: { label: 'Menunggu Pembatalan', variant: 'secondary' as const },
     }
 
     return statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'secondary' as const }

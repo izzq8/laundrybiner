@@ -4,7 +4,8 @@ import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, MapPin, Phone, User, Package, CheckCircle, Truck, ArrowLeft, Receipt, CreditCard, Timer } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Calendar, Clock, MapPin, Phone, User, Package, CheckCircle, Truck, ArrowLeft, Receipt, CreditCard, Timer, X, AlertTriangle } from "lucide-react"
 import { CountdownTimer, useCanMakePayment } from "@/components/countdown-timer"
 import { useAutoPaymentCheck } from '@/hooks/useAutoPaymentCheck'
 
@@ -36,12 +37,16 @@ interface Order {
   }
 }
 
-export default function OrderDetailPage() {  const params = useParams()
+export default function OrderDetailPage() {
+  const params = useParams()
   const router = useRouter()
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelling, setCancelling] = useState(false)
   // Use the hook to determine if payment can be made
   const canMakePayment = useCanMakePayment(
     order?.created_at || '', 
@@ -235,13 +240,55 @@ export default function OrderDetailPage() {  const params = useParams()
       setRefreshing(false)
     }
   }
+
+  const handleCancelOrder = async () => {
+    if (!order) return
+    
+    setCancelling(true)
+    try {
+      const response = await fetch('/api/orders/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orderId: order.id,
+          reason: cancelReason || 'User requested cancellation'
+        }),
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        console.log('Cancellation request submitted:', data)
+        // Refresh order data to show updated status
+        await fetchOrderDetail(order.id)
+        setShowCancelModal(false)
+        setCancelReason('')
+        alert('Permintaan pembatalan telah dikirim. Admin akan meninjau permintaan Anda.')
+      } else {
+        console.error('Failed to submit cancellation request:', data.message)
+        alert('Gagal mengirim permintaan pembatalan: ' + data.message)
+      }
+    } catch (error) {
+      console.error('Error submitting cancellation request:', error)
+      alert('Gagal mengirim permintaan pembatalan')
+    } finally {
+      setCancelling(false)
+    }
+  }
+
+  const canCancelOrder = () => {
+    if (!order) return false
+    // Allow cancellation only for pending and confirmed orders
+    return ['pending', 'confirmed'].includes(order.status)
+  }
   const getStatusBadge = (status: string) => {
     if (!order) return { label: status, variant: 'secondary' as const, color: 'bg-gray-100 text-gray-800' }
     
     const hasPickup = order.pickup_option === 'pickup'
     const hasDelivery = order.delivery_option === 'delivery'
-    
-    const statusConfig = {
+      const statusConfig = {
       pending: { label: 'Menunggu', variant: 'secondary' as const, color: 'bg-yellow-100 text-yellow-800' },
       confirmed: { label: 'Dikonfirmasi', variant: 'default' as const, color: 'bg-[#0F4C75] text-white' },
       picked_up: { 
@@ -261,6 +308,7 @@ export default function OrderDetailPage() {  const params = useParams()
         color: 'bg-green-500 text-white' 
       },
       cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
+      pending_cancellation: { label: 'Menunggu Pembatalan', variant: 'secondary' as const, color: 'bg-orange-100 text-orange-800' },
     }
 
     const config = statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'secondary' as const, color: 'bg-gray-100 text-gray-800' }
@@ -765,7 +813,19 @@ export default function OrderDetailPage() {  const params = useParams()
                               Last checked: {lastChecked.toLocaleTimeString()}
                             </div>
                           )}
-                        </div>
+                        </div>                      )}
+                      
+                      {/* Cancel Order Button - Show only if order can be cancelled */}
+                      {canCancelOrder() && (
+                        <Button
+                          onClick={() => setShowCancelModal(true)}
+                          variant="outline"
+                          className="w-full border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400"
+                          disabled={cancelling}
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          {cancelling ? 'Mengirim...' : 'Batalkan Pesanan'}
+                        </Button>
                       )}
                       
                       <Button
@@ -809,11 +869,65 @@ export default function OrderDetailPage() {  const params = useParams()
                     </div>
                   </CardContent>
                 </Card>
-              </div>
-            </div>
+              </div>            </div>
           </div>
         </div>
       </div>
+
+      {/* Cancel Order Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Batalkan Pesanan</h3>
+                <p className="text-sm text-gray-600">Pesanan #{order?.order_number}</p>
+              </div>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-3">
+                Apakah Anda yakin ingin membatalkan pesanan ini? Admin akan meninjau permintaan pembatalan Anda.
+              </p>
+              
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Alasan pembatalan (opsional):
+              </label>
+              <Textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Jelaskan alasan Anda membatalkan pesanan..."
+                className="w-full"
+                rows={3}
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCancelModal(false)
+                  setCancelReason('')
+                }}
+                className="flex-1"
+                disabled={cancelling}
+              >
+                Batal
+              </Button>
+              <Button
+                onClick={handleCancelOrder}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                disabled={cancelling}
+              >
+                {cancelling ? 'Mengirim...' : 'Ya, Batalkan'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
