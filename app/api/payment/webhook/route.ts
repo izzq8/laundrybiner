@@ -49,36 +49,108 @@ export async function POST(request: NextRequest) {
     } else if (transaction_status === "pending") {
       orderStatus = "pending"
       paymentStatus = "pending"
-    }    // Update order in database
-    const { error: orderError } = await supabase
-      .from("orders")
-      .update({
-        status: orderStatus,
-        payment_status: paymentStatus,
-        payment_method: payment_type,
-        transaction_time: transaction_time ? new Date(transaction_time).toISOString() : null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("transaction_id", order_id) // Use transaction_id instead of order_id
+    }    // Update order in database - try multiple approaches to match order
+    console.log(`Attempting to update order with order_id: ${order_id}`)
+    
+    let updateSuccess = false
+    let orderData = null
 
-    if (orderError) {
-      console.error("Error updating order status:", orderError)
-    } else {
-      console.log(`Order ${order_id} updated to status: ${orderStatus}`)
+    // Approach 1: Try to update by midtrans_order_id or midtrans_transaction_id
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .update({
+          status: orderStatus,
+          payment_status: paymentStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .or(`midtrans_order_id.eq.${order_id},midtrans_transaction_id.eq.${order_id}`)
+        .select()
+
+      if (!error && data && data.length > 0) {
+        updateSuccess = true
+        orderData = data
+        console.log(`Direct match update successful for order_id: ${order_id}`)
+      }
+    } catch (error) {
+      console.log("Direct match failed, trying fallback approaches")
     }
 
-    // Log webhook for debugging
-    const { error: logError } = await supabase.from("payment_logs").insert({
-      order_id: order_id,
-      transaction_status: transaction_status,
-      payment_type: payment_type,
-      amount: amount,
-      webhook_data: body,
-      processed_at: new Date().toISOString(),
-    })
+    // Approach 2: If direct match failed, try to extract order number from order_id
+    if (!updateSuccess) {
+      try {
+        // Extract order number pattern (e.g., from "LDY-20250619-0001-1734567890123")
+        const orderIdParts = order_id.split('-')
+        if (orderIdParts.length >= 3) {
+          const orderNumber = `${orderIdParts[0]}-${orderIdParts[1]}-${orderIdParts[2]}`
+          console.log(`Trying fallback with extracted order_number: ${orderNumber}`)
+          
+          const { data, error } = await supabase
+            .from("orders")
+            .update({
+              status: orderStatus,
+              payment_status: paymentStatus,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("order_number", orderNumber)
+            .select()
+            
+          if (!error && data && data.length > 0) {
+            updateSuccess = true
+            orderData = data
+            console.log(`Fallback update successful for order_number: ${orderNumber}`)
+          }
+        }
+      } catch (error) {
+        console.log("Order number extraction failed")
+      }
+    }
 
-    if (logError) {
-      console.error("Error logging webhook:", logError)
+    // Approach 3: If still no success, try pattern matching
+    if (!updateSuccess) {
+      try {
+        console.log(`Trying pattern matching for order_id: ${order_id}`)
+        const { data, error } = await supabase
+          .from("orders")
+          .update({
+            status: orderStatus,
+            payment_status: paymentStatus,
+            updated_at: new Date().toISOString(),
+          })
+          .or(`order_number.ilike.%${order_id.split('-')[0]}%,order_number.ilike.%${order_id.split('-')[1]}%`)
+          .select()
+          
+        if (!error && data && data.length > 0) {
+          updateSuccess = true
+          orderData = data
+          console.log(`Pattern matching update successful`)
+        }
+      } catch (error) {
+        console.log("Pattern matching failed")
+      }
+    }
+
+    if (updateSuccess && orderData) {
+      console.log(`Order updated successfully to status: ${orderStatus}, payment: ${paymentStatus}`)
+      console.log(`Updated ${orderData.length} order(s):`, orderData)
+    } else {
+      console.error(`Failed to update order with order_id: ${order_id}`)
+    }// Log webhook for debugging (optional - only if table exists)
+    try {
+      const { error: logError } = await supabase.from("payment_logs").insert({
+        order_id: order_id,
+        transaction_status: transaction_status,
+        payment_type: payment_type,
+        amount: amount,
+        webhook_data: body,
+        processed_at: new Date().toISOString(),
+      })
+
+      if (logError) {
+        console.error("Error logging webhook (table might not exist):", logError)
+      }
+    } catch (logError) {
+      console.log("Payment logs table doesn't exist, skipping log")
     }
 
     return NextResponse.json({
