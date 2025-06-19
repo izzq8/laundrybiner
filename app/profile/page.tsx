@@ -12,6 +12,8 @@ import { ArrowLeft, User, Mail, Phone, MapPin, Lock, LogOut, Trash2, Info } from
 import { signOut, getCurrentUser, getUserProfile, updateUserProfile, supabase } from "@/lib/supabase"
 import { useToast } from "@/components/ui/use-toast"
 import { AddressDialog } from "@/components/address-dialog"
+import { useAlert } from "@/hooks/useAlert"
+import { AlertDialog } from "@/components/ui/alert-dialog"
 
 interface Address {
   id: string;
@@ -26,6 +28,7 @@ interface Address {
 
 export default function ProfilePage() {
   const { toast } = useToast()
+  const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
   const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -183,15 +186,14 @@ export default function ProfilePage() {
       toast.error("Gagal keluar dari akun. Silakan coba lagi.")
     }
   }
-
   const handleChangePassword = () => {
     if (loginMethod === "google") {
-      alert("Anda masuk menggunakan Google. Untuk mengubah password, silakan kelola melalui akun Google Anda.")
+      showInfo("Akun Google", "Anda masuk menggunakan Google. Untuk mengubah password, silakan kelola melalui akun Google Anda.")
       return
     }
 
     // Redirect to change password page or show modal
-    alert("Fitur ganti password akan segera tersedia.")
+    showInfo("Segera Tersedia", "Fitur ganti password akan segera tersedia.")
   }
 
   return (
@@ -414,14 +416,21 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
       </div>      {/* Address Dialog - Separate from the main return to avoid hydration issues */}
-      {userId && (
-        <AddressDialog
+      {userId && (        <AddressDialog
           isOpen={isAddressDialogOpen}
           onOpenChange={setIsAddressDialogOpen}
           userId={userId}
           onAddressAdded={handleAddressAdded}
         />
       )}
+
+      <AlertDialog
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+      />
     </div>
   )
 }

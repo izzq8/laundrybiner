@@ -5,9 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { AlertDialog } from "@/components/ui/alert-dialog"
 import { Calendar, Clock, MapPin, Phone, User, Package, CheckCircle, Truck, ArrowLeft, Receipt, CreditCard, Timer, X, AlertTriangle } from "lucide-react"
 import { CountdownTimer, useCanMakePayment } from "@/components/countdown-timer"
 import { useAutoPaymentCheck } from '@/hooks/useAutoPaymentCheck'
+import { useAlert } from '@/hooks/useAlert'
 
 interface Order {
   id: string
@@ -47,6 +49,10 @@ export default function OrderDetailPage() {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
+  
+  // Alert hook
+  const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
+  
   // Use the hook to determine if payment can be made
   const canMakePayment = useCanMakePayment(
     order?.created_at || '', 
@@ -197,13 +203,11 @@ export default function OrderDetailPage() {
         
         console.log('Redirecting to payment URL:', data.payment_url)
         // Redirect to Midtrans payment page
-        window.location.href = data.payment_url
-      } else {
+        window.location.href = data.payment_url      } else {
         console.error('Payment creation failed:', data)
-        alert('Gagal membuat pembayaran: ' + (data.message || 'Unknown error'))
-      }} catch (error) {
-      console.error('Payment error:', error)
-      alert('Gagal membuat pembayaran')
+        showError('Gagal Membuat Pembayaran', data.message || 'Unknown error')
+      }}catch (error) {      console.error('Payment error:', error)
+      showError('Gagal Membuat Pembayaran', 'Terjadi kesalahan saat memproses pembayaran')
     } finally {
       setRefreshing(false)
     }
@@ -223,21 +227,19 @@ export default function OrderDetailPage() {
       })
 
       const data = await response.json()
-      
-      if (data.success) {
+        if (data.success) {
         console.log('Payment status updated:', data)
         // Refresh order data
         await fetchOrderDetail(order.id)
-        alert('Status pembayaran berhasil diperbarui!')
+        showSuccess('Berhasil!', 'Status pembayaran berhasil diperbarui!')
       } else {
         console.error('Failed to update payment status:', data.message)
-        alert('Gagal memperbarui status: ' + data.message)
+        showError('Gagal Memperbarui Status', data.message)
       }
     } catch (error) {
       console.error('Error updating payment status:', error)
-      alert('Gagal memperbarui status pembayaran')
-    } finally {
-      setRefreshing(false)
+      showError('Gagal Memperbarui Status', 'Terjadi kesalahan saat memperbarui status pembayaran')
+    } finally {setRefreshing(false)
     }
   }
 
@@ -246,7 +248,10 @@ export default function OrderDetailPage() {
     
     setCancelling(true)
     try {
-      const response = await fetch('/api/orders/cancel', {
+      console.log('🚀 Starting cancel order process for:', order.id)
+      
+      // Try the simple API first
+      const response = await fetch('/api/orders/cancel-simple', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -257,26 +262,50 @@ export default function OrderDetailPage() {
         }),
       })
 
+      console.log('🔍 Cancel API Response status:', response.status)
       const data = await response.json()
+      console.log('🔍 Cancel API Response data:', data)
       
       if (data.success) {
-        console.log('Cancellation request submitted:', data)
-        // Refresh order data to show updated status
+        console.log('✅ Cancellation request submitted successfully:', data)        // Refresh order data to show updated status
         await fetchOrderDetail(order.id)
         setShowCancelModal(false)
         setCancelReason('')
-        alert('Permintaan pembatalan telah dikirim. Admin akan meninjau permintaan Anda.')
+        showSuccess('Permintaan Dikirim', 'Permintaan pembatalan telah dikirim. Admin akan meninjau permintaan Anda.')
       } else {
-        console.error('Failed to submit cancellation request:', data.message)
-        alert('Gagal mengirim permintaan pembatalan: ' + data.message)
+        console.error('❌ Failed to submit cancellation request:', data)
+        
+        // Fallback to original API if simple API fails
+        console.log('🔄 Trying fallback API...')
+        const fallbackResponse = await fetch('/api/orders/cancel', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            orderId: order.id,
+            reason: cancelReason || 'User requested cancellation'
+          }),
+        })
+
+        const fallbackData = await fallbackResponse.json()
+          if (fallbackData.success) {
+          console.log('✅ Fallback API succeeded:', fallbackData)
+          await fetchOrderDetail(order.id)
+          setShowCancelModal(false)
+          setCancelReason('')
+          showSuccess('Permintaan Dikirim', 'Permintaan pembatalan telah dikirim. Admin akan meninjau permintaan Anda.')
+        } else {
+          console.error('❌ Both APIs failed:', fallbackData)
+          showError('Gagal Mengirim Permintaan', `${data.message}\n\nDetail: ${data.error || 'Unknown error'}`)
+        }
       }
     } catch (error) {
-      console.error('Error submitting cancellation request:', error)
-      alert('Gagal mengirim permintaan pembatalan')
+      console.error('❌ Network error submitting cancellation request:', error)
+      showError('Gagal Mengirim Permintaan', 'Terjadi kesalahan jaringan saat mengirim permintaan pembatalan')
     } finally {
       setCancelling(false)
-    }
-  }
+    }  }
 
   const canCancelOrder = () => {
     if (!order) return false
@@ -468,51 +497,144 @@ export default function OrderDetailPage() {
               {/* Main Content */}
               <div className="lg:col-span-2 space-y-6">                {/* Payment Countdown - Show only for pending payments */}
                 {order.payment_status === 'pending' && (
-                  <Card className="border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-4">
-                        <div className="flex-shrink-0">
-                          <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                            <Timer className="h-6 w-6 text-amber-600" />
+                  <Card className="border-l-4 border-l-amber-500 bg-white shadow-sm">
+                    <CardContent className="p-0">
+                      {/* Header Section */}
+                      <div className="px-6 py-4 bg-gradient-to-r from-amber-50 to-orange-50">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center">
+                              <Timer className="h-4 w-4 text-white" />
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                Waktu Pembayaran Tersisa
+                              </h3>
+                              <p className="text-sm text-gray-600">
+                                Selesaikan pembayaran sebelum pesanan kedaluwarsa
+                              </p>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-amber-900 mb-1">
-                            Waktu Pembayaran Tersisa
-                          </h3>
-                          <p className="text-sm text-amber-700">
-                            Selesaikan pembayaran sebelum pesanan kedaluwarsa (24 jam dari pembuatan pesanan)
-                          </p>
-                        </div>                        <div className="text-right">                          <div className="text-3xl font-bold text-amber-900 font-mono bg-white px-4 py-2 rounded-lg shadow-sm border border-amber-200">
-                            <CountdownTimer 
-                              createdAt={order.created_at} 
-                              showIcon={false} 
-                              fontSize="large"
-                              compact={true}
-                            />
+                      </div>                      {/* Countdown Display */}                      <div className="px-4 sm:px-6 py-6">                        <div className="flex items-center justify-center">
+                          <div className="text-center w-full">                            {/* Minimalist Timer Card */}
+                            <div className="bg-white border border-gray-200 rounded-lg px-6 py-10 shadow-sm">
+                              <div className="mb-4">
+                                <div className="text-sm font-medium text-gray-600 mb-4">
+                                  Batas Waktu Pembayaran
+                                </div>
+                                <div className="flex justify-center">
+                                  <CountdownTimer 
+                                    createdAt={order.created_at} 
+                                    showIcon={false} 
+                                    fontSize="large"
+                                    compact={true}
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-xs text-gray-500 tracking-wide text-center">
+                                JAM : MENIT : DETIK
+                              </div>
+                            </div>
+                            
+                            {/* Simple Progress Indicator */}
+                            <div className="mt-6 w-full max-w-sm mx-auto">
+                              <div className="bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                <div 
+                                  className="bg-amber-500 h-full rounded-full transition-all duration-1000 ease-linear"
+                                  style={{
+                                    width: `${Math.max(0, Math.min(100, 
+                                      (1 - (Date.now() - new Date(order.created_at).getTime()) / (24 * 60 * 60 * 1000)) * 100
+                                    ))}%`
+                                  }}
+                                ></div>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-2 text-center">
+                                Sisa waktu dari 24 jam
+                              </p>
+                            </div>
                           </div>
-                          <p className="text-xs text-amber-600 mt-1 text-center">JAM:MENIT:DETIK</p>
+                        </div>
+                      </div>                      {/* Timeline Info */}
+                      <div className="px-4 sm:px-6 pb-6">
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <h4 className="text-sm font-medium text-gray-800 mb-3">Informasi Waktu</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-600">Pesanan dibuat</span>
+                              <span className="font-medium text-gray-900">
+                                {new Date(order.created_at).toLocaleDateString('id-ID', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-600">Batas pembayaran</span>
+                              <span className="font-medium text-gray-900">                                {new Date(new Date(order.created_at).getTime() + 24 * 60 * 60 * 1000).toLocaleDateString('id-ID', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div className="mt-4 pt-4 border-t border-amber-200">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-amber-700">
-                            Pesanan dibuat: {new Date(order.created_at).toLocaleString('id-ID')}
-                          </span>
-                          <span className="text-amber-700 font-medium">
-                            Batas waktu: {new Date(new Date(order.created_at).getTime() + 24 * 60 * 60 * 1000).toLocaleString('id-ID')}
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>                  </Card>
-                )}
-
-                {/* Payment status will be handled by the countdown timer component */}
+                    </CardContent>
+                  </Card>
+                )}                {/* Expired payment warning */}
                 {order.payment_status === 'pending' && !canMakePayment && (
-                  <CountdownTimer 
-                    createdAt={order.created_at} 
-                    showExpiredAction={true}
-                  />
+                  <Card className="border-l-4 border-l-red-500 bg-white shadow-sm">
+                    <CardContent className="p-0">
+                      {/* Header Section */}
+                      <div className="px-6 py-4 bg-gradient-to-r from-red-50 to-pink-50">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+                            <AlertTriangle className="h-4 w-4 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              Waktu Pembayaran Habis
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                              Batas waktu pembayaran sudah habis
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Content */}
+                      <div className="px-6 py-4">
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <p className="text-sm text-gray-700 mb-3">
+                            Pesanan ini telah melewati batas waktu pembayaran 24 jam. Silakan hubungi customer service untuk bantuan lebih lanjut atau buat pesanan baru.
+                          </p>
+                          <div className="flex flex-col sm:flex-row gap-3">
+                            <Button
+                              size="sm"
+                              className="bg-red-600 hover:bg-red-700 text-white"
+                              onClick={() => window.open('https://wa.me/6289888880575', '_blank')}
+                            >
+                              Hubungi Customer Service
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => router.push('/order')}
+                            >
+                              Buat Pesanan Baru
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
 
                 {/* Order Progress */}
@@ -566,9 +688,7 @@ export default function OrderDetailPage() {
                       })}
                     </div>
                   </CardContent>
-                </Card>
-
-                {/* Service Details */}
+                </Card>                {/* Service Details */}
                 <Card className="border-gray-200 shadow-sm">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-gray-900">
@@ -578,28 +698,32 @@ export default function OrderDetailPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                        <div>
-                          <h4 className="font-semibold text-gray-900">
-                            {order.service_types?.name || 'Layanan Laundry'}
-                          </h4>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {order.service_types?.description || 'Layanan pencucian'}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            Tipe: {order.service_types?.type || 'Regular'}
-                          </p>
-                          {order.weight && (
-                            <p className="text-sm text-gray-600">
-                              Estimasi Berat: {order.weight} kg
+                      <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900 text-lg">
+                              {order.service_types?.name || 'Layanan Laundry'}
+                            </h4>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {order.service_types?.description || 'Layanan pencucian'}
                             </p>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold text-[#0F4C75]">
-                            Rp {order.total_amount.toLocaleString()}
-                          </p>
-                          <p className="text-sm text-gray-600">Total</p>
+                            <div className="flex items-center gap-4 mt-2">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {order.service_types?.type || 'Regular'}
+                              </span>
+                              {order.weight && (
+                                <span className="text-sm text-gray-600 font-medium">
+                                  {order.weight} kg
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right ml-4">
+                            <p className="text-2xl font-bold text-[#0F4C75]">
+                              Rp {order.total_amount.toLocaleString()}
+                            </p>
+                            <p className="text-sm text-gray-600">Total Pembayaran</p>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -729,22 +853,21 @@ export default function OrderDetailPage() {
                       <CreditCard className="h-5 w-5" />
                       Ringkasan Pembayaran
                     </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
+                  </CardHeader>                  <CardContent className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center py-2">
                         <span className="text-sm text-gray-600">Nomor Pesanan</span>
-                        <span className="text-sm font-medium">{order.order_number}</span>
+                        <span className="text-sm font-medium font-mono">{order.order_number}</span>
                       </div>
 
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center py-2">
                         <span className="text-sm text-gray-600">Status Pesanan</span>
                         <Badge className={getStatusBadge(order.status).color} variant="secondary">
                           {getStatusBadge(order.status).label}
                         </Badge>
                       </div>
 
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center py-2">
                         <span className="text-sm text-gray-600">Status Pembayaran</span>
                         <Badge className={getPaymentStatusBadge(order.payment_status).color} variant="secondary">
                           {getPaymentStatusBadge(order.payment_status).label}
@@ -753,25 +876,25 @@ export default function OrderDetailPage() {
                     </div>
 
                     <div className="border-t pt-4">
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Biaya Layanan</span>
-                          <span>Rp {order.total_amount.toLocaleString()}</span>
+                          <span className="font-medium">Rp {order.total_amount.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Biaya Admin</span>
-                          <span>Rp 0</span>
+                          <span className="font-medium">Rp 0</span>
                         </div>
-                        <div className="flex justify-between items-center font-bold text-lg border-t pt-2">
+                        <div className="flex justify-between items-center font-bold text-lg border-t pt-3">
                           <span>Total Pembayaran</span>
                           <span className="text-[#0F4C75]">Rp {order.total_amount.toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="text-xs text-gray-500 pt-4 border-t">
-                      <p className="mb-1">
-                        <strong>Tanggal Pemesanan:</strong><br />
+                    <div className="text-xs text-gray-500 pt-4 border-t bg-gray-50 p-3 rounded-lg">
+                      <p className="font-medium text-gray-700 mb-1">Tanggal Pemesanan</p>
+                      <p>
                         {new Date(order.created_at).toLocaleDateString('id-ID', {
                           year: 'numeric',
                           month: 'long',
@@ -780,7 +903,7 @@ export default function OrderDetailPage() {
                           minute: '2-digit'
                         })}
                       </p>
-                    </div>                    <div className="space-y-2 pt-4">
+                    </div><div className="space-y-3 pt-4">
                       {/* Payment Button - Show only if payment is needed */}
                       {canMakePayment && (
                         <Button
@@ -791,31 +914,32 @@ export default function OrderDetailPage() {
                           {refreshing ? 'Memproses...' : 'Bayar Sekarang'}
                         </Button>
                       )}
-                        {/* Refresh Payment Status Button - Always visible for development */}
-                      <Button
-                        onClick={refreshPaymentStatus}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                        variant="outline"
-                        disabled={refreshing || isChecking}
-                      >
-                        {refreshing ? 'Memperbarui...' : isChecking ? 'Auto-checking...' : 'Perbarui Status Pembayaran'}
-                      </Button>
-                      
-                      {/* Auto-check status indicator */}
+
+                      {/* Payment Status Actions for Pending Payments */}
                       {order.payment_status === 'pending' && (
-                        <div className="text-xs text-center text-gray-500 bg-gray-50 p-2 rounded-lg">
-                          <div className="flex items-center justify-center gap-1">
-                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                            <span>Auto-checking payment status...</span>
-                          </div>
-                          {lastChecked && (
-                            <div className="mt-1">
-                              Last checked: {lastChecked.toLocaleTimeString()}
+                        <>
+                          <Button
+                            onClick={refreshPaymentStatus}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                            disabled={refreshing || isChecking}
+                          >
+                            {refreshing ? 'Memperbarui...' : isChecking ? 'Auto-checking...' : 'Perbarui Status Pembayaran'}
+                          </Button>
+                          
+                          {/* Auto-check status indicator */}
+                          <div className="text-xs text-center text-gray-500 bg-gray-50 p-2 rounded-lg">
+                            <div className="flex items-center justify-center gap-1">
+                              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                              <span>Auto-checking setiap 30 detik...</span>
                             </div>
-                          )}
-                        </div>                      )}
-                      
-                      {/* Cancel Order Button - Show only if order can be cancelled */}
+                            {lastChecked && (
+                              <div className="mt-1">
+                                Terakhir dicek: {lastChecked.toLocaleTimeString()}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}                      {/* Cancel Order Button - Show only if order can be cancelled */}
                       {canCancelOrder() && (
                         <Button
                           onClick={() => setShowCancelModal(true)}
@@ -826,45 +950,6 @@ export default function OrderDetailPage() {
                           <X className="h-4 w-4 mr-2" />
                           {cancelling ? 'Mengirim...' : 'Batalkan Pesanan'}
                         </Button>
-                      )}
-                      
-                      <Button
-                        onClick={() => router.push('/orders')}
-                        className="w-full"
-                        variant="outline"
-                      >
-                        Kembali ke Daftar Pesanan
-                      </Button>
-                      <Button
-                        onClick={() => router.push('/')}
-                        className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white"
-                      >
-                        Beranda
-                      </Button>
-                    </div>                    {/* Refresh Payment Status Button */}
-                    <div className="pt-4 border-t">
-                      <Button
-                        onClick={checkNow}
-                        className="w-full"
-                        variant="default"
-                        disabled={refreshing || isChecking}
-                      >
-                        {refreshing ? 'Memperbarui...' : isChecking ? 'Checking...' : 'Cek Status Pembayaran Sekarang'}
-                      </Button>
-                      
-                      {/* Auto-check status indicator */}
-                      {order.payment_status === 'pending' && (
-                        <div className="text-xs text-center text-gray-500 mt-2 bg-gray-50 p-2 rounded-lg">
-                          <div className="flex items-center justify-center gap-1">
-                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                            <span>Auto-checking every 30 seconds...</span>
-                          </div>
-                          {lastChecked && (
-                            <div className="mt-1">
-                              Last auto-check: {lastChecked.toLocaleTimeString()}
-                            </div>
-                          )}
-                        </div>
                       )}
                     </div>
                   </CardContent>
@@ -924,10 +1009,22 @@ export default function OrderDetailPage() {
               >
                 {cancelling ? 'Mengirim...' : 'Ya, Batalkan'}
               </Button>
-            </div>
-          </div>
+            </div>          </div>
         </div>
       )}
+
+      {/* Custom Alert Dialog */}
+      <AlertDialog
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        confirmText={alertState.confirmText}
+        cancelText={alertState.cancelText}
+        onConfirm={alertState.onConfirm}
+        showCancel={alertState.showCancel}
+      />
     </div>
   )
 }

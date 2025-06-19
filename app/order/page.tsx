@@ -10,9 +10,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { AlertDialog } from "@/components/ui/alert-dialog"
 import { Calendar, Clock, MapPin, Phone, User, Package, Minus, Plus, Trash2, ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
+import { useAlert } from '@/hooks/useAlert'
 
 interface ServiceType {
   id: string
@@ -61,6 +63,10 @@ export default function OrderPage() {
   const [loading, setLoading] = useState(false)
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])
   const [itemTypes, setItemTypes] = useState<ItemType[]>([])
+  
+  // Alert hook
+  const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
+  
   const [orderData, setOrderData] = useState<OrderFormData>({
     serviceType: 'kiloan',
     serviceTypeId: '',
@@ -250,12 +256,11 @@ export default function OrderPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    const validationError = validateForm()
+      const validationError = validateForm()
     if (validationError) {
-      alert(validationError)
+      showWarning('Form Tidak Valid', validationError)
       return
-    }    setLoading(true)
+    }setLoading(true)
 
     try {
       // Generate Midtrans order ID first
@@ -306,11 +311,9 @@ export default function OrderPage() {
       
       // Redirect to order detail page instead of automatic payment
       // This allows user to see countdown timer and choose when to pay
-      router.push(`/orders/${createResult.order.id}`)
-
-    } catch (error) {
+      router.push(`/orders/${createResult.order.id}`)    } catch (error) {
       console.error('Error creating order:', error)
-      alert(error instanceof Error ? error.message : 'Terjadi kesalahan')
+      showError('Gagal Membuat Pesanan', error instanceof Error ? error.message : 'Terjadi kesalahan')
     } finally {
       setLoading(false)
     }
@@ -903,9 +906,21 @@ export default function OrderPage() {
               </div>
             </div>
           </form>
-          </div>
-        </div>
+          </div>        </div>
       </div>
+
+      {/* Custom Alert Dialog */}
+      <AlertDialog
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        confirmText={alertState.confirmText}
+        cancelText={alertState.cancelText}
+        onConfirm={alertState.onConfirm}
+        showCancel={alertState.showCancel}
+      />
     </div>
   )
 }

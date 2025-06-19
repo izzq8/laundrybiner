@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { AlertDialog } from "@/components/ui/alert-dialog"
 import { Calendar, User, Package, Eye, ArrowLeft, CreditCard, RefreshCw } from "lucide-react"
 import { CountdownTimer, useCanMakePayment } from "@/components/countdown-timer"
 import { usePaymentStatusUpdates } from '@/components/auto-payment-service'
 import { useAuth } from "@/components/auth-provider"
+import { useAlert } from '@/hooks/useAlert'
 
 interface Order {
   id: string
@@ -80,6 +82,9 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'active' | 'history'>('active')
+  
+  // Alert hook
+  const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
   useEffect(() => {
     fetchOrders()
   }, [])
@@ -119,7 +124,6 @@ export default function OrdersPage() {
       setLoading(false)
     }
   }
-
   // Listen for payment status updates from background service
   usePaymentStatusUpdates((data) => {
     console.log('📢 Payment status update received on orders page:', data)
@@ -128,42 +132,50 @@ export default function OrdersPage() {
       fetchOrders()
     }
   })
+  
   const getStatusBadge = (status: string, order?: Order) => {
     const hasPickup = order?.pickup_option === 'pickup'
     const hasDelivery = order?.delivery_option === 'delivery'
     
     const statusConfig = {
-      pending: { label: 'Menunggu', variant: 'secondary' as const },
-      confirmed: { label: 'Dikonfirmasi', variant: 'default' as const },
+      pending: { label: 'Menunggu', variant: 'secondary' as const, color: 'bg-yellow-100 text-yellow-800' },
+      confirmed: { label: 'Dikonfirmasi', variant: 'default' as const, color: 'bg-[#0F4C75] text-white' },
       picked_up: { 
         label: hasPickup ? 'Dijemput' : 'Diterima', 
-        variant: 'default' as const 
+        variant: 'default' as const, 
+        color: 'bg-blue-100 text-blue-800' 
       },
-      in_process: { label: 'Diproses', variant: 'default' as const },
+      in_process: { label: 'Diproses', variant: 'default' as const, color: 'bg-orange-100 text-orange-800' },
       ready: { 
         label: hasDelivery ? 'Siap Diantar' : 'Siap Diambil', 
-        variant: 'default' as const 
-      },      delivered: { 
-        label: hasDelivery ? 'Diantar' : 'Diambil', 
-        variant: 'default' as const 
+        variant: 'default' as const, 
+        color: 'bg-green-100 text-green-800' 
       },
-      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const },
-      pending_cancellation: { label: 'Menunggu Pembatalan', variant: 'secondary' as const },
+      delivered: { 
+        label: hasDelivery ? 'Diantar' : 'Diambil', 
+        variant: 'default' as const, 
+        color: 'bg-green-500 text-white' 
+      },
+      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
+      pending_cancellation: { label: 'Menunggu Pembatalan', variant: 'secondary' as const, color: 'bg-orange-100 text-orange-800' },
     }
 
-    return statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'secondary' as const }
+    const config = statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'secondary' as const, color: 'bg-gray-100 text-gray-800' }
+    return config
   }
 
   const getPaymentStatusBadge = (paymentStatus: string) => {
     const statusConfig = {
-      pending: { label: 'Menunggu', variant: 'secondary' as const },
-      paid: { label: 'Lunas', variant: 'default' as const },
-      failed: { label: 'Gagal', variant: 'destructive' as const },
-      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const },
-      expired: { label: 'Kedaluwarsa', variant: 'destructive' as const },
+      pending: { label: 'Menunggu', variant: 'secondary' as const, color: 'bg-yellow-100 text-yellow-800' },
+      paid: { label: 'Lunas', variant: 'default' as const, color: 'bg-green-500 text-white' },
+      settlement: { label: 'Lunas', variant: 'default' as const, color: 'bg-green-500 text-white' },
+      failed: { label: 'Gagal', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
+      cancelled: { label: 'Dibatalkan', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
+      expired: { label: 'Kedaluwarsa', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
     }
 
-    return statusConfig[paymentStatus as keyof typeof statusConfig] || { label: paymentStatus, variant: 'secondary' as const }
+    const config = statusConfig[paymentStatus as keyof typeof statusConfig] || { label: paymentStatus, variant: 'secondary' as const, color: 'bg-gray-100 text-gray-800' }
+    return config
   }
 
   const handleViewOrder = (orderId: string) => {
@@ -229,16 +241,15 @@ export default function OrdersPage() {
       })
 
       const data = await response.json()
-      
-      if (data.success && data.payment_url) {
+        if (data.success && data.payment_url) {
         // Redirect to Midtrans payment page
         window.location.href = data.payment_url
       } else {
-        alert('Gagal membuat pembayaran: ' + (data.message || 'Unknown error'))
+        showError('Gagal Membuat Pembayaran', data.message || 'Unknown error')
       }
     } catch (error) {
       console.error('Payment error:', error)
-      alert('Gagal membuat pembayaran')
+      showError('Gagal Membuat Pembayaran', 'Terjadi kesalahan saat memproses pembayaran')
     }
   }
 
@@ -335,15 +346,13 @@ export default function OrdersPage() {
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <h1 className="text-xl font-semibold text-gray-900">Pesanan Saya</h1>
-            </div>
-
-            {/* Tabs */}
+            </div>            {/* Tabs */}
             <div className="flex border-b">
               <button
                 onClick={() => setActiveTab('active')}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'active'
-                    ? 'border-blue-600 text-blue-600'
+                    ? 'border-[#0F4C75] text-[#0F4C75]'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -353,7 +362,7 @@ export default function OrdersPage() {
                 onClick={() => setActiveTab('history')}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'history'
-                    ? 'border-blue-600 text-blue-600'
+                    ? 'border-[#0F4C75] text-[#0F4C75]'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -381,25 +390,23 @@ export default function OrdersPage() {
                       : 'Riwayat pesanan yang sudah selesai akan muncul di sini'
                     }
                   </p>
-                </div>
-                {activeTab === 'active' && (
+                </div>                {activeTab === 'active' && (
                   <Button
                     onClick={handleNewOrder}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg"
+                    className="bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white px-6 py-2 rounded-lg"
                   >
                     Buat Order Baru
                   </Button>
                 )}
               </div>
-            ) : (
-              <div className="space-y-4">
+            ) : (              <div className="space-y-4">
                 {filteredOrders.map((order) => (
                   <Card key={order.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle className="text-lg">{order.order_number}</CardTitle>
-                          <p className="text-sm text-gray-600">
+                    <CardHeader className="pb-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg font-semibold text-gray-900">{order.order_number}</CardTitle>
+                          <p className="text-sm text-gray-600 mt-1">
                             {new Date(order.created_at).toLocaleDateString('id-ID', {
                               year: 'numeric',
                               month: 'long',
@@ -409,20 +416,21 @@ export default function OrdersPage() {
                             })}
                           </p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold text-green-600">
+                        <div className="text-left sm:text-right">
+                          <p className="text-2xl font-bold text-[#0F4C75]">
                             Rp {order.total_amount.toLocaleString()}
                           </p>
-                          <div className="flex gap-2 mt-2">                            <Badge {...getStatusBadge(order.status, order)}>
+                          <div className="flex gap-2 mt-2 sm:justify-end">
+                            <Badge className={getStatusBadge(order.status, order).color} variant="secondary">
                               {getStatusBadge(order.status, order).label}
                             </Badge>
-                            <Badge {...getPaymentStatusBadge(order.payment_status)}>
+                            <Badge className={getPaymentStatusBadge(order.payment_status).color} variant="secondary">
                               {getPaymentStatusBadge(order.payment_status).label}
                             </Badge>
                           </div>
                         </div>
                       </div>
-                    </CardHeader>                    <CardContent>
+                    </CardHeader><CardContent>
                       {/* Countdown Timer for pending payments */}
                       {order.payment_status === 'pending' && (
                         <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
@@ -440,20 +448,18 @@ export default function OrdersPage() {
                             />
                           </div>
                         </div>
-                      )}
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center space-x-2">
+                      )}                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                          <div className="flex items-center gap-2">
                             <Package className="h-4 w-4 text-gray-400" />
                             <span className="text-sm text-gray-600">{order.service_types?.name || 'N/A'}</span>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-gray-400" />
                             <span className="text-sm text-gray-600">{order.customer_name}</span>
                           </div>
                           {order.pickup_date && (
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-gray-400" />
                               <span className="text-sm text-gray-600">
                                 {new Date(order.pickup_date).toLocaleDateString('id-ID')}
@@ -461,16 +467,30 @@ export default function OrdersPage() {
                             </div>
                           )}
                         </div>
-                        <OrderActionButtons order={order} onPayment={handlePayment} onViewDetail={handleViewOrder} />
+                        <div className="flex justify-start sm:justify-end">
+                          <OrderActionButtons order={order} onPayment={handlePayment} onViewDetail={handleViewOrder} />
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
                 ))}
               </div>
             )}
-          </div>
-        </div>
+          </div>        </div>
       </div>
+
+      {/* Custom Alert Dialog */}
+      <AlertDialog
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        confirmText={alertState.confirmText}
+        cancelText={alertState.cancelText}
+        onConfirm={alertState.onConfirm}
+        showCancel={alertState.showCancel}
+      />
     </div>
   )
 }

@@ -12,8 +12,11 @@ import { Separator } from "@/components/ui/separator"
 import { Sparkles, Mail, Lock, Eye, EyeOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { signInWithGoogle, signInWithEmail } from "@/lib/supabase"
+import { useAlert } from "@/hooks/useAlert"
+import { AlertDialog } from "@/components/ui/alert-dialog"
 
 export default function SignInPage() {
+  const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -39,13 +42,13 @@ export default function SignInPage() {
       }
     } catch (error: any) {
       console.error("Sign in error:", error)
-
+      
       if (error.message?.includes("Invalid login credentials")) {
-        alert("Email atau password salah. Silakan periksa kembali.")
+        showError("Login Gagal", "Email atau password salah. Silakan periksa kembali.")
       } else if (error.message?.includes("Email not confirmed")) {
-        alert("Silakan konfirmasi email Anda terlebih dahulu.")
+        showWarning("Email Belum Dikonfirmasi", "Silakan konfirmasi email Anda terlebih dahulu.")
       } else {
-        alert("Gagal masuk. Silakan coba lagi.")
+        showError("Login Gagal", "Gagal masuk. Silakan coba lagi.")
       }
     } finally {
       setLoading(false)
@@ -63,11 +66,10 @@ export default function SignInPage() {
 
       if (error.message?.includes("popup_closed_by_user")) {
         // User closed the popup, no need to show error
-        return
-      } else if (error.message?.includes("access_denied")) {
-        alert("Akses ditolak. Silakan coba lagi dan berikan izin yang diperlukan.")
+        return      } else if (error.message?.includes("access_denied")) {
+        showError("Akses Ditolak", "Akses ditolak. Silakan coba lagi dan berikan izin yang diperlukan.")
       } else {
-        alert("Gagal masuk dengan Google. Silakan coba lagi.")
+        showError("Login Gagal", "Gagal masuk dengan Google. Silakan coba lagi.")
       }
     } finally {
       setGoogleLoading(false)
@@ -191,10 +193,17 @@ export default function SignInPage() {
               <Link href="/auth/signup" className="text-[#0F4C75] hover:underline font-medium">
                 Daftar sekarang
               </Link>
-            </div>
-          </CardContent>
+            </div>          </CardContent>
         </Card>
       </div>
+
+      <AlertDialog
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+      />
     </div>
   )
 }

@@ -5,17 +5,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useAlert } from "@/hooks/useAlert"
+import { AlertDialog } from "@/components/ui/alert-dialog"
 
 export default function ManualUpdatePage() {
+  const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
   const [orderNumber, setOrderNumber] = useState("")
   const [paymentStatus, setPaymentStatus] = useState("paid")
   const [orderStatus, setOrderStatus] = useState("confirmed")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
-
   const handleUpdate = async () => {
     if (!orderNumber) {
-      alert("Order number is required")
+      showError("Input Required", "Order number is required")
       return
     }
 
@@ -37,16 +39,15 @@ export default function ManualUpdatePage() {
 
       const data = await response.json()
       setResult(data)
-      
-      if (data.success) {
-        alert("Order status updated successfully!")
+        if (data.success) {
+        showSuccess("Update Successful", "Order status updated successfully!")
       } else {
-        alert("Failed to update: " + data.message)
+        showError("Update Failed", "Failed to update: " + data.message)
       }    } catch (error) {
       console.error("Update error:", error)
       const errorMessage = error instanceof Error ? error.message : "Unknown error"
       setResult({ error: errorMessage })
-      alert("Update failed: " + errorMessage)
+      showError("Update Failed", "Update failed: " + errorMessage)
     } finally {
       setLoading(false)
     }
@@ -81,9 +82,8 @@ export default function ManualUpdatePage() {
         console.error(`Error updating ${orderNum}:`, error)
       }
     }
-    
-    setLoading(false)
-    alert("Bulk update completed! Check console for details.")
+      setLoading(false)
+    showSuccess("Bulk Update Complete", "Bulk update completed! Check console for details.")
   }
 
   return (
@@ -178,9 +178,16 @@ export default function ManualUpdatePage() {
                 {JSON.stringify(result, null, 2)}
               </pre>
             </div>
-          )}
-        </CardContent>
+          )}        </CardContent>
       </Card>
+
+      <AlertDialog
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+      />
     </div>
   )
 }

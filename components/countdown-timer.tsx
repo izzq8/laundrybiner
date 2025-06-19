@@ -92,7 +92,7 @@ export function CountdownTimer({
   }  const getFontSizeClass = () => {
     switch (fontSize) {
       case 'small': return 'text-sm'
-      case 'large': return 'text-3xl'
+      case 'large': return 'text-6xl sm:text-7xl md:text-8xl'
       default: return 'text-base'
     }
   }
@@ -103,7 +103,7 @@ export function CountdownTimer({
         <Timer className={`h-4 w-4 ${isExpired ? 'text-red-500' : 'text-amber-500'}`} />
       )}
       <div className="flex flex-col">
-        <span className={`font-mono ${getFontSizeClass()} ${isExpired ? 'text-red-600' : 'text-amber-600'}`}>
+        <span className={`font-mono font-light ${getFontSizeClass()} ${isExpired ? 'text-red-600' : 'text-slate-800'}`}>
           {isExpired ? 'EXPIRED' : timeLeft}
         </span>
         {!compact && (
