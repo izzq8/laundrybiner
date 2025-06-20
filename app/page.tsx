@@ -122,11 +122,6 @@ export default function HomePage() {
                   Pesanan Saya
                 </Link>
               )}
-              {isLoggedIn && (
-                <Link href="/order" className="text-white bg-[#0F4C75] hover:bg-[#0F4C75]/90 px-4 py-2 rounded-lg transition-colors">
-                  Pesan Sekarang
-                </Link>
-              )}
             </nav>
 
             {/* Auth Buttons */}

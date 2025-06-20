@@ -150,7 +150,7 @@ export default function SignInPage() {
                 </Link>
               </div>
 
-              <Button type="submit" className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90" disabled={loading}>
+              <Button type="submit" className="w-full text-white bg-[#0F4C75] hover:bg-[#0F4C75]/90" disabled={loading}>
                 {loading ? "Memproses..." : "Masuk"}
               </Button>
             </form>
