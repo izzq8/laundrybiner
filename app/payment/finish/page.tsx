@@ -240,7 +240,7 @@ export default function PaymentFinishPage() {
 
           <div className="space-y-3">            {status === 'success' && (
               <>
-                <Button onClick={handleViewOrder} className="w-full">
+                <Button onClick={handleViewOrder} className="w-full text-white bg-green-600 hover:bg-green-700">
                   Lihat Semua Pesanan
                 </Button>
                 <Button variant="outline" onClick={handleBackToHome} className="w-full">

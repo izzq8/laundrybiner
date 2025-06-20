@@ -15,6 +15,7 @@ import { Calendar, Clock, MapPin, Phone, User, Package, Minus, Plus, Trash2, Arr
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
 import { useAlert } from '@/hooks/useAlert'
+import { supabase } from '@/lib/supabase'
 
 interface ServiceType {
   id: string
@@ -37,6 +38,17 @@ interface OrderItem {
   quantity: number
   pricePerItem: number
   totalPrice: number
+}
+
+interface SavedAddress {
+  id: string
+  label?: string
+  is_default: boolean
+  address?: string
+  address_line?: string
+  city?: string
+  postal_code?: string
+  notes?: string
 }
 
 interface OrderFormData {
@@ -63,6 +75,8 @@ export default function OrderPage() {
   const [loading, setLoading] = useState(false)
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])
   const [itemTypes, setItemTypes] = useState<ItemType[]>([])
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([])
+  const [userId, setUserId] = useState<string | null>(null)
   
   // Alert hook
   const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
@@ -87,10 +101,10 @@ export default function OrderPage() {
 
   const pickupFee = 5000
   const deliveryFee = 5000
-  
-  useEffect(() => {
+    useEffect(() => {
     fetchServiceTypes()
     fetchItemTypes()
+    fetchUserIdAndAddresses()
     
     // Set default pickup date to tomorrow
     const tomorrow = new Date()
@@ -131,6 +145,53 @@ export default function OrderPage() {
       }
     } catch (error) {
       console.error('Error fetching item types:', error)
+    }
+  }
+
+  const fetchUserIdAndAddresses = async () => {
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (user) {
+        setUserId(user.id)
+        await fetchSavedAddresses(user.id)
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error)
+    }
+  }
+  const fetchSavedAddresses = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('addresses')
+        .select('*')
+        .eq('user_id', userId)
+        .order('is_default', { ascending: false })
+      
+      if (error) throw error
+      
+      if (data) {
+        setSavedAddresses(data)
+      }
+    } catch (error) {
+      console.error('Error fetching saved addresses:', error)
+    }
+  }
+
+  const handleUseSavedAddress = (address: SavedAddress, type: 'pickup' | 'delivery') => {
+    const fullAddress = address.address_line || address.address || ''
+    
+    if (type === 'pickup') {
+      setOrderData(prev => ({
+        ...prev,
+        pickupAddress: fullAddress
+      }))
+    } else {
+      setOrderData(prev => ({
+        ...prev,
+        deliveryAddress: fullAddress
+      }))
     }
   }
 
@@ -568,13 +629,38 @@ export default function OrderPage() {
                           <div className="text-sm font-medium text-blue-600">Gratis</div>
                         </Label>
                       </div>
-                    </RadioGroup>
-
-                    {/* Pickup Address and Details Input - Only show if pickup option is selected */}
+                    </RadioGroup>                    {/* Pickup Address and Details Input - Only show if pickup option is selected */}
                     {orderData.pickupOption === 'pickup' && (
                       <div className="space-y-4">
                         <div>
-                          <Label htmlFor="pickup-address">Alamat Penjemputan</Label>
+                          <div className="flex items-center justify-between mb-2">
+                            <Label htmlFor="pickup-address">Alamat Penjemputan</Label>
+                            {savedAddresses.length > 0 && (
+                              <Select
+                                value=""
+                                onValueChange={(value) => {
+                                  const address = savedAddresses.find(addr => addr.id === value)
+                                  if (address) handleUseSavedAddress(address, 'pickup')
+                                }}
+                              >
+                                <SelectTrigger className="w-48">
+                                  <SelectValue placeholder="Gunakan alamat tersimpan" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {savedAddresses.map((address) => (
+                                    <SelectItem key={address.id} value={address.id}>
+                                      <div className="flex items-center gap-2">
+                                        <span>{address.label}</span>
+                                        {address.is_default && (
+                                          <span className="text-xs bg-blue-100 text-blue-800 px-1 rounded">Default</span>
+                                        )}
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </div>
                           <Textarea
                             id="pickup-address"
                             placeholder="Masukkan alamat lengkap untuk penjemputan..."
@@ -666,7 +752,34 @@ export default function OrderPage() {
                     {orderData.deliveryOption === 'delivery' && (
                       <div className="space-y-4">
                         <div>
-                          <Label htmlFor="delivery-address">Alamat Pengantaran</Label>
+                          <div className="flex items-center justify-between mb-2">
+                            <Label htmlFor="delivery-address">Alamat Pengantaran</Label>
+                            {savedAddresses.length > 0 && (
+                              <Select
+                                value=""
+                                onValueChange={(value) => {
+                                  const address = savedAddresses.find(addr => addr.id === value)
+                                  if (address) handleUseSavedAddress(address, 'delivery')
+                                }}
+                              >
+                                <SelectTrigger className="w-48">
+                                  <SelectValue placeholder="Gunakan alamat tersimpan" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {savedAddresses.map((address) => (
+                                    <SelectItem key={address.id} value={address.id}>
+                                      <div className="flex items-center gap-2">
+                                        <span>{address.label}</span>
+                                        {address.is_default && (
+                                          <span className="text-xs bg-blue-100 text-blue-800 px-1 rounded">Default</span>
+                                        )}
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </div>
                           <Textarea
                             id="delivery-address"
                             placeholder="Masukkan alamat lengkap untuk pengantaran..."
