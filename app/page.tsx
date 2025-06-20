@@ -118,15 +118,16 @@ export default function HomePage() {
               </Link>
               <Link href="/faq" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
                 FAQ
-              </Link>
-              {isLoggedIn && (
+              </Link>              {isLoggedIn && (
                 <Link href="/orders" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
                   Pesanan Saya
                 </Link>
               )}
-              <Link href="/order" className="text-white bg-[#0F4C75] hover:bg-[#0F4C75]/90 px-4 py-2 rounded-lg transition-colors">
-                Pesan Sekarang
-              </Link>
+              {isLoggedIn && (
+                <Link href="/order" className="text-white bg-[#0F4C75] hover:bg-[#0F4C75]/90 px-4 py-2 rounded-lg transition-colors">
+                  Pesan Sekarang
+                </Link>
+              )}
             </nav>
 
             {/* Auth Buttons */}
@@ -167,15 +168,26 @@ export default function HomePage() {
                 </Link>
                 <Link href="#contact" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
                   Kontak
-                </Link>
-                <Link href="/faq" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
+                </Link>                <Link href="/faq" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
                   FAQ
                 </Link>
+                {isLoggedIn && (
+                  <Link href="/orders" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
+                    Pesanan Saya
+                  </Link>
+                )}
                 <div className="flex flex-col gap-2 pt-4 border-t">
                   {isLoggedIn ? (
-                    <Link href="/dashboard">
-                      <Button className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white">Dashboard</Button>
-                    </Link>
+                    <>
+                      <Link href="/order">
+                        <Button className="w-full bg-yellow-400 hover:bg-yellow-500 text-white font-semibold mb-2">
+                          Pesan Sekarang
+                        </Button>
+                      </Link>
+                      <Link href="/dashboard">
+                        <Button className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white">Dashboard</Button>
+                      </Link>
+                    </>
                   ) : (
                     <>
                       <Link href="/auth/signin">
@@ -206,11 +218,19 @@ export default function HomePage() {
               Layanan laundry profesional dengan pickup & delivery gratis. Pakaian bersih, wangi, dan rapi dalam 2-3
               hari.
             </p>            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/order">
-                <Button size="lg" className="text-white bg-yellow-400 hover:bg-yellow-500 font-semibold px-8 py-3">
-                  Mulai Order Sekarang
-                </Button>
-              </Link>
+              {isLoggedIn ? (
+                <Link href="/order">
+                  <Button size="lg" className="text-white bg-yellow-400 hover:bg-yellow-500 font-semibold px-8 py-3">
+                    Mulai Order Sekarang
+                  </Button>
+                </Link>
+              ) : (
+                <Link href="/auth/signup">
+                  <Button size="lg" className="text-white bg-yellow-400 hover:bg-yellow-500 font-semibold px-8 py-3">
+                    Daftar untuk Mulai Order
+                  </Button>
+                </Link>
+              )}
               <Link href="#services">
                 <Button
                   size="lg"
@@ -311,15 +331,22 @@ export default function HomePage() {
       {/* CTA Section */}
       <section className="py-20 bg-[#0F4C75] text-white">
         <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Siap Mencoba Layanan Kami?</h2>
-          <p className="text-xl mb-8 text-blue-100">
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">Siap Mencoba Layanan Kami?</h2>          <p className="text-xl mb-8 text-blue-100">
             Daftar sekarang dan nikmati kemudahan laundry dengan pickup & delivery gratis
           </p>
-          <Link href={isLoggedIn ? "/order/create" : "/auth/signup"}>
-            <Button size="lg" className="text-white bg-yellow-400 hover:bg-yellow-500 font-semibold px-8 py-3">
-              Mulai Order Sekarang
-            </Button>
-          </Link>
+          {isLoggedIn ? (
+            <Link href="/order/create">
+              <Button size="lg" className="text-white bg-yellow-400 hover:bg-yellow-500 font-semibold px-8 py-3">
+                Mulai Order Sekarang
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/auth/signup">
+              <Button size="lg" className="text-white bg-yellow-400 hover:bg-yellow-500 font-semibold px-8 py-3">
+                Daftar Sekarang
+              </Button>
+            </Link>
+          )}
         </div>
       </section>
 
