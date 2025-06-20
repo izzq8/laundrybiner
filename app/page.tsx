@@ -317,7 +317,7 @@ export default function HomePage() {
           <p className="text-xl mb-8 text-blue-100">
             Daftar sekarang dan nikmati kemudahan laundry dengan pickup & delivery gratis
           </p>
-          <Link href={isLoggedIn ? "/order/create" : "/auth/signup"}>
+          <Link href="/order">
             <Button size="lg" className="text-white bg-yellow-400 hover:bg-yellow-500 font-semibold px-8 py-3">
               Mulai Order Sekarang
             </Button>
