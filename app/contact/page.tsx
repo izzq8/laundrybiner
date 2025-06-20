@@ -33,7 +33,7 @@ export default function ContactPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)    // Simulate form submission
+    setLoading(true) // Simulate form submission
     setTimeout(() => {
       showSuccess("Pesan Terkirim", "Pesan Anda telah terkirim! Kami akan segera menghubungi Anda.")
       setFormData({
@@ -107,7 +107,11 @@ export default function ContactPage() {
                     <div>
                       <h3 className="font-semibold text-gray-900 mb-1">Telepon/WhatsApp</h3>
                       <p className="text-gray-600">0898 8880 575</p>
-                      <Button onClick={handleWhatsApp} size="sm" className="mt-2 bg-green-600 hover:bg-green-700">
+                      <Button
+                        onClick={handleWhatsApp}
+                        size="sm"
+                        className="mt-2 bg-green-600 hover:bg-green-700 text-white"
+                      >
                         <MessageCircle className="w-4 h-4 mr-2" />
                         Chat WhatsApp
                       </Button>
@@ -238,7 +242,11 @@ export default function ContactPage() {
                     />
                   </div>
 
-                  <Button type="submit" className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90" disabled={loading}>
+                  <Button
+                    type="submit"
+                    className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white"
+                    disabled={loading}
+                  >
                     {loading ? (
                       <>
                         <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -254,7 +262,6 @@ export default function ContactPage() {
                 </form>
               </CardContent>
             </Card>
-
             {/* Quick Contact */}
             <Card className="mt-6">
               <CardHeader>
@@ -263,7 +270,7 @@ export default function ContactPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <Button onClick={handleWhatsApp} className="flex-1 bg-green-600 hover:bg-green-700">
+                  <Button onClick={handleWhatsApp} className="flex-1 bg-green-600 hover:bg-green-700 text-white">
                     <MessageCircle className="w-4 h-4 mr-2" />
                     WhatsApp
                   </Button>
@@ -273,7 +280,8 @@ export default function ContactPage() {
                   </Button>
                 </div>
               </CardContent>
-            </Card>          </div>
+            </Card>{" "}
+          </div>
         </div>
       </div>
 

@@ -248,20 +248,24 @@ export default function FAQPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button onClick={handleWhatsApp} className="bg-green-600 hover:bg-green-700">
+              <Button onClick={handleWhatsApp} className="bg-green-600 hover:bg-green-700 text-white">
                 <MessageCircle className="w-4 h-4 mr-2" />
                 WhatsApp
               </Button>
               <Button
                 onClick={() => window.open("tel:+6289888880575")}
                 variant="outline"
-                className="border-white text-white hover:bg-white hover:text-[#0F4C75]"
+                className="bg-white text-[#0F4C75] border-white hover:bg-[#0F4C75] hover:text-white"
               >
                 <Phone className="w-4 h-4 mr-2" />
                 Telepon
               </Button>
               <Link href="/contact">
-                <Button variant="outline" className="border-white text-white hover:bg-white hover:text-[#0F4C75]">
+                <Button
+                  variant="outline"
+                  className="bg-white text-[#0F4C75] border-white hover:bg-[#0F4C75] hover:text-white"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
                   Kirim Pesan
                 </Button>
               </Link>
