@@ -102,14 +102,15 @@ export default function HomePage() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2">
-  <img src="/laundrybiner-logo.jpg" alt="LaundryBiner" className="w-8 h-8 object-contain" />
-  <span className="text-xl font-bold text-[#0F4C75]">LaundryBiner</span>
-</Link>
-{/* Desktop Navigation */}            <nav className="hidden md:flex items-center gap-8">
+              <img src="/laundrybiner-logo.jpg" alt="LaundryBiner" className="w-8 h-8 object-contain" />
+              <span className="text-xl font-bold text-[#0F4C75]">LaundryBiner</span>
+            </Link>
+            {/* Desktop Navigation */}{" "}
+            <nav className="hidden md:flex items-center gap-8">
               <Link href="#services" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
                 Layanan
               </Link>
-              <Link href="#about" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
+              <Link href="/about" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
                 Tentang
               </Link>
               <Link href="#contact" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
@@ -123,11 +124,13 @@ export default function HomePage() {
                   Pesanan Saya
                 </Link>
               )}
-              <Link href="/order" className="text-white bg-[#0F4C75] hover:bg-[#0F4C75]/90 px-4 py-2 rounded-lg transition-colors">
+              <Link
+                href="/order"
+                className="text-white bg-[#0F4C75] hover:bg-[#0F4C75]/90 px-4 py-2 rounded-lg transition-colors"
+              >
                 Pesan Sekarang
               </Link>
             </nav>
-
             {/* Auth Buttons */}
             <div className="hidden md:flex items-center gap-3">
               {isLoggedIn ? (
@@ -147,11 +150,12 @@ export default function HomePage() {
                 </>
               )}
             </div>
-{/* Mobile Menu Button */}
+            {/* Mobile Menu Button */}
             <button className="md:hidden" onClick={() => setIsMenuOpen(!isMenuOpen)}>
               {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
+
           {/* Mobile Menu */}
           {isMenuOpen && (
             <div className="md:hidden py-4 border-t">
@@ -159,7 +163,7 @@ export default function HomePage() {
                 <Link href="#services" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
                   Layanan
                 </Link>
-                <Link href="#about" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
+                <Link href="/about" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
                   Tentang
                 </Link>
                 <Link href="#contact" className="text-gray-600 hover:text-[#0F4C75] transition-colors">
@@ -202,7 +206,8 @@ export default function HomePage() {
             <p className="text-xl md:text-2xl mb-8 text-blue-100">
               Layanan laundry profesional dengan pickup & delivery gratis. Pakaian bersih, wangi, dan rapi dalam 2-3
               hari.
-            </p>            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            </p>{" "}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/order">
                 <Button size="lg" className="text-white bg-yellow-400 hover:bg-yellow-500 font-semibold px-8 py-3">
                   Mulai Order Sekarang
