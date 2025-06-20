@@ -9,13 +9,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { AlertDialog } from "@/components/ui/alert-dialog"
-import { Sparkles, Mail, Lock, User, Eye, EyeOff } from "lucide-react"
+import { Mail, Lock, User, Eye, EyeOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { signInWithGoogle, signUpWithEmail } from "@/lib/supabase"
-import { useAlert } from '@/hooks/useAlert'
+import { useAlert } from "@/hooks/useAlert"
 
-export default function SignUpPage() {  const [formData, setFormData] = useState({
+export default function SignUpPage() {
+  const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
@@ -26,7 +26,7 @@ export default function SignUpPage() {  const [formData, setFormData] = useState
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const router = useRouter()
-  
+
   // Alert hook
   const { alertState, hideAlert, showSuccess, showError, showWarning, showInfo } = useAlert()
 
@@ -66,7 +66,10 @@ export default function SignUpPage() {  const [formData, setFormData] = useState
       console.error("Sign up error:", error)
 
       if (error.message?.includes("User already registered")) {
-        showError("Email Sudah Terdaftar", "Email sudah terdaftar. Silakan gunakan email lain atau masuk dengan akun yang ada.")
+        showError(
+          "Email Sudah Terdaftar",
+          "Email sudah terdaftar. Silakan gunakan email lain atau masuk dengan akun yang ada.",
+        )
       } else if (error.message?.includes("Password should be at least 6 characters")) {
         showWarning("Password Terlalu Pendek", "Password harus minimal 6 karakter.")
       } else {
@@ -88,7 +91,8 @@ export default function SignUpPage() {  const [formData, setFormData] = useState
 
       if (error.message?.includes("popup_closed_by_user")) {
         // User closed the popup, no need to show error
-        return      } else if (error.message?.includes("access_denied")) {
+        return
+      } else if (error.message?.includes("access_denied")) {
         showError("Akses Ditolak", "Silakan coba lagi dan berikan izin yang diperlukan.")
       } else {
         showError("Gagal Daftar", "Gagal daftar dengan Google. Silakan coba lagi.")
@@ -104,9 +108,7 @@ export default function SignUpPage() {  const [formData, setFormData] = useState
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-3">
-            <div className="w-12 h-12 bg-[#0F4C75] rounded-xl flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
+            <img src="/laundrybiner-logo.jpg" alt="LaundryBiner" className="w-16 h-16 object-contain" />
             <div>
               <h1 className="text-2xl font-bold text-[#0F4C75]">LaundryBiner</h1>
               <p className="text-xs text-gray-600">Laundry Made Easy</p>

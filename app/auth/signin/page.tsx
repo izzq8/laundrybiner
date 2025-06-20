@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Sparkles, Mail, Lock, Eye, EyeOff } from "lucide-react"
+import { Mail, Lock, Eye, EyeOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { signInWithGoogle, signInWithEmail } from "@/lib/supabase"
 import { useAlert } from "@/hooks/useAlert"
@@ -42,7 +42,7 @@ export default function SignInPage() {
       }
     } catch (error: any) {
       console.error("Sign in error:", error)
-      
+
       if (error.message?.includes("Invalid login credentials")) {
         showError("Login Gagal", "Email atau password salah. Silakan periksa kembali.")
       } else if (error.message?.includes("Email not confirmed")) {
@@ -66,7 +66,8 @@ export default function SignInPage() {
 
       if (error.message?.includes("popup_closed_by_user")) {
         // User closed the popup, no need to show error
-        return      } else if (error.message?.includes("access_denied")) {
+        return
+      } else if (error.message?.includes("access_denied")) {
         showError("Akses Ditolak", "Akses ditolak. Silakan coba lagi dan berikan izin yang diperlukan.")
       } else {
         showError("Login Gagal", "Gagal masuk dengan Google. Silakan coba lagi.")
@@ -82,9 +83,7 @@ export default function SignInPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-3">
-            <div className="w-12 h-12 bg-[#0F4C75] rounded-xl flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
+            <img src="/laundrybiner-logo.jpg" alt="LaundryBiner" className="w-16 h-16 object-contain" />
             <div>
               <h1 className="text-2xl font-bold text-[#0F4C75]">LaundryBiner</h1>
               <p className="text-xs text-gray-600">Laundry Made Easy</p>
@@ -150,18 +149,16 @@ export default function SignInPage() {
                 </Link>
               </div>
 
-              <Button type="submit" className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90" disabled={loading}>
+              <Button type="submit" className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white" disabled={loading}>
                 {loading ? "Memproses..." : "Masuk"}
               </Button>
             </form>
-
             <div className="relative">
               <Separator />
               <div className="absolute inset-0 flex items-center justify-center">
                 <span className="bg-white px-2 text-sm text-gray-500">atau</span>
               </div>
             </div>
-
             <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={googleLoading}>
               {googleLoading ? (
                 <div className="w-4 h-4 mr-2 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
@@ -187,13 +184,13 @@ export default function SignInPage() {
               )}
               {googleLoading ? "Memproses..." : "Masuk dengan Google"}
             </Button>
-
             <div className="text-center text-sm">
               <span className="text-gray-600">Belum punya akun? </span>
               <Link href="/auth/signup" className="text-[#0F4C75] hover:underline font-medium">
                 Daftar sekarang
               </Link>
-            </div>          </CardContent>
+            </div>{" "}
+          </CardContent>
         </Card>
       </div>
 
