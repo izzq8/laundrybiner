@@ -133,10 +133,12 @@ export default function AboutPage() {
                 </Badge>
               </div>
               <div className="text-center p-4 border rounded-lg">
-                <h4 className="font-semibold text-gray-900 mb-2">Paket Hemat</h4>
-                <Badge className="text-lg bg-[#0F4C75]">Rp 5.000/kg</Badge>
-                <p className="text-xs text-gray-600 mt-1">Cuci + Setrika</p>
-              </div>
+  <h4 className="font-semibold text-gray-900 mb-2">Paket Hemat</h4>
+  <Badge variant="secondary" className="text-lg">
+    Rp 5.000/kg
+  </Badge>
+  <p className="text-xs text-gray-600 mt-1">Cuci + Setrika</p>
+</div>
               <div className="text-center p-4 border rounded-lg">
                 <h4 className="font-semibold text-gray-900 mb-2">Cuci Satuan</h4>
                 <Badge variant="secondary" className="text-lg">
@@ -215,7 +217,9 @@ export default function AboutPage() {
           <p className="text-blue-100 mb-6">Langsung aja hubungi LaundryBiner, biar kami yang urus!</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/auth/signup">
-              <Button size="lg" className="bg-white text-[#0F4C75] hover:bg-gray-100">
+              <Button size="lg"
+                variant="outline"
+                className="border-white text-[#0F4C75] bg-white hover:bg-[#0F4C75] hover:text-white">
                 Daftar Sekarang
               </Button>
             </Link>
@@ -223,7 +227,7 @@ export default function AboutPage() {
               <Button
                 size="lg"
                 variant="outline"
-                className="border-white text-white hover:bg-white hover:text-[#0F4C75]"
+                className="border-white text-[#0F4C75] bg-white hover:bg-[#0F4C75] hover:text-white"
               >
                 Hubungi Kami
               </Button>
